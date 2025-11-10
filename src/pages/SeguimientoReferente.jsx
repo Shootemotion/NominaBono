@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { dashArea, dashSector } from "@/lib/dashboard";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
 
 import FilterBar from "@/components/seguimiento/FilterBar";
 import GanttView from "@/components/seguimiento/GanttView";
@@ -22,7 +23,7 @@ export default function SeguimientoReferente() {
   const esDirector = user?.rol === "directivo" || user?.isRRHH === true;
   const esSuperAdmin = user?.rol === "superadmin";
   const esVisor = user?.rol === "visor"; // 🚩 nuevo caso: usuario común/visor
-
+const navigate = useNavigate();
   // Quienes pueden ver algo de la página
   const puedeVer = esReferente || esDirector || esSuperAdmin || esVisor;
 
@@ -40,13 +41,7 @@ export default function SeguimientoReferente() {
   const [view, setView] = useState("gantt");
   const [zoom, setZoom] = useState("mes");
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [itemSeleccionado, setItemSeleccionado] = useState(null);
-  const [empleadosDelItem, setEmpleadosDelItem] = useState([]);
-  const [localHito, setLocalHito] = useState(null);
-  const [applyToAll, setApplyToAll] = useState(false);
-  const [selectedEmpleados, setSelectedEmpleados] = useState([]);
-  const [comentarioManager, setComentarioManager] = useState("");
+
 
   // ====== Carga inicial de data ======
   useEffect(() => {
@@ -218,66 +213,21 @@ export default function SeguimientoReferente() {
     return entries.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   }, [filtered, tipoFiltro, view]);
 
-  // ====== Modal hito ======
-  const openHitoModal = async (item, empleados, hito) => {
-    setApplyToAll(false);
-    setSelectedEmpleados(empleados?.length === 1 ? [empleados[0]._id] : []);
-    setComentarioManager("");
-    setItemSeleccionado(item);
-    setEmpleadosDelItem(empleados || []);
-
-    try {
-      const existing = await api(
-        `/evaluaciones?empleado=${empleados[0]._id}&year=${anio}&plantillaId=${item._id}&periodo=${hito.periodo}`
-      );
-
-      if (Array.isArray(existing) && existing.length) {
-        const ev = existing[0];
-        setLocalHito({
-          _id: ev._id,
-          periodo: ev.periodo,
-          fecha: hito.fecha,
-          actual: ev.actual ?? null,
-          comentario: ev.comentarioManager || ev.comentario || "",
-          estado: ev.estado,
-          metas:
-            ev.metasResultados?.map((m) => ({
-              _id: m._id,
-              nombre: m.nombre,
-              esperado: m.esperado,
-              unidad: m.unidad,
-              resultado: m.resultado,
-              cumple: m.cumple,
-            })) ?? [],
-        });
-      } else {
-        const metasSrc = Array.isArray(hito.metas) ? hito.metas : [];
-        setLocalHito({
-          periodo: hito.periodo,
-          fecha: hito.fecha,
-          actual: hito.actual ?? null,
-          comentario: hito.comentario ?? "",
-          estado: "MANAGER_DRAFT",
-          metas: metasSrc.map((m, idx) => ({
-            _id: m._id ?? `${item._id}-${idx}`,
-            nombre: m.nombre,
-            esperado: m.esperado ?? m.target ?? null,
-            unidad: m.unidad ?? "",
-            resultado: m.resultado ?? null,
-            cumple:
-              m.resultado != null && (m.esperado ?? m.target) != null
-                ? Number(m.resultado) >= Number(m.esperado ?? m.target)
-                : false,
-          })),
-        });
-      }
-    } catch (e) {
-      console.error("openHitoModal error", e);
-      toast.error("No se pudo cargar datos del hito");
-    }
-
-    setModalOpen(true);
+ const openHitoPage = (item, empleados, hito) => {
+    // Navegación con “state” para evitar refetch innecesario; la página tiene fallback a fetch.
+    const empId = empleados?.[0]?._id ?? null;
+    navigate(`/evaluacion/${item._id}/${hito.periodo}/${empId ?? ""}`, {
+      state: {
+        from: "seguimiento",
+        anio,
+        itemSeleccionado: item,
+        empleadosDelItem: empleados || [],
+        hito,
+      },
+      replace: false,
+    });
   };
+
 
   // ====== Render ======
   return (
@@ -374,48 +324,20 @@ export default function SeguimientoReferente() {
         {/* contenido */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           {view === "agenda" ? (
-            <CalendarView agendaList={agendaList} openHitoModal={openHitoModal} />
+             <CalendarView agendaList={agendaList} openHitoModal={openHitoPage} />
           ) : (
             <GanttView
               filtered={filtered}
               tipoFiltro={tipoFiltro}
               anio={anio}
               zoom={zoom}
-              openHitoModal={openHitoModal}
+               openHitoModal={openHitoPage}
             />
           )}
         </div>
 
         {/* modal */}
-        <EvalModal
-          isOpen={modalOpen}
-          onClose={() => {
-            setModalOpen(false);
-            setItemSeleccionado(null);
-            setLocalHito(null);
-            setComentarioManager("");
-          }}
-          {...{
-            itemSeleccionado,
-            localHito,
-            setLocalHito,
-            empleadosDelItem,
-            applyToAll,
-            setApplyToAll,
-            selectedEmpleados,
-            setSelectedEmpleados,
-            comentarioManager,
-            setComentarioManager,
-          }}
-          empleadoId={
-            applyToAll
-              ? null
-              : selectedEmpleados.length
-              ? selectedEmpleados[0]
-              : empleadosDelItem[0]?._id
-          }
-          anio={anio}
-        />
+   
       </div>
     </div>
   );

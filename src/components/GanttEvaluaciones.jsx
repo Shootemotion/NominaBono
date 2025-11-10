@@ -1,20 +1,28 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useNavigate } from "react-router-dom";
 
 export default function GanttEvaluaciones({
   empleados = [],
   selectedEmpleadoId,
   onUpdateHito,
 }) {
+  const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const [hitoSeleccionado, setHitoSeleccionado] = useState(null);
   const [empleadosSeleccionados, setEmpleadosSeleccionados] = useState([]);
 
-  const handleOpenModal = (hito, plantilla, empleadosAplicables) => {
-    setHitoSeleccionado({ ...hito, plantilla });
-    setEmpleadosSeleccionados(empleadosAplicables.map((e) => e._id));
-    setModalOpen(true);
+  const handleOpenPage = (hito, plantilla, empleadosAplicables) => {
+    const emp = empleadosAplicables?.[0];
+    navigate(`/evaluacion/${plantilla._id}/${hito.periodo}/${emp?._id ?? ""}`, {
+      state: {
+        from: "gantt",
+        itemSeleccionado: plantilla,
+        empleadosDelItem: empleadosAplicables,
+        hito,
+      },
+    });
   };
 
   const handleToggleEmpleado = (id) => {
@@ -106,7 +114,7 @@ export default function GanttEvaluaciones({
                               ? "bg-red-500 text-white"
                               : "bg-yellow-500 text-black"
                           }`}
-                          onClick={() => handleOpenModal(h, p, [emp.empleado])}
+                          onClick={() => handleOpenPage(h, p, [emp.empleado])}
                           title={`Meta: ${h.meta ?? "—"} / Real: ${h.real ?? "—"} · ${h.periodo}`}
                         >
                           {h.periodo} ({h.meta ?? "—"}% / {h.real ?? "—"}%)
@@ -122,59 +130,7 @@ export default function GanttEvaluaciones({
       </table>
 
       {/* Modal */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Actualizar hito</DialogTitle>
-          </DialogHeader>
-
-          {hitoSeleccionado && (
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-medium">{hitoSeleccionado.plantilla?.nombre}</p>
-                <p className="text-xs text-muted-foreground">
-                  {hitoSeleccionado.periodo} · {hitoSeleccionado.fecha}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium">Resultado real</label>
-                <input
-                  type="number"
-                  defaultValue={hitoSeleccionado.real || ""}
-                  className="border rounded px-2 py-1 w-full text-sm"
-                  onChange={(e) =>
-                    setHitoSeleccionado({ ...hitoSeleccionado, real: Number(e.target.value) })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1">Aplicar a empleados</label>
-                {empleados.map((emp) => (
-                  <div key={emp.empleado._id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={empleadosSeleccionados.includes(emp.empleado._id)}
-                      onChange={() => handleToggleEmpleado(emp.empleado._id)}
-                    />
-                    <span className="text-sm">
-                      {emp.empleado.apellido}, {emp.empleado.nombre}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleSave}>Guardar</Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+    
     </div>
   );
 }

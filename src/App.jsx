@@ -5,6 +5,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getToken } from '@/lib/api';
 import { Toaster } from "@/components/ui/sonner"; 
+import EvaluacionFlujo from '@/pages/EvaluacionFlujo';
 
 // Importar Paginas
 import GestionEstructura from '@/pages/GestionNomina';
@@ -76,7 +77,18 @@ element={<RequireAuth allow={['directivo','rrhh','jefe_area','jefe_sector','supe
               </RequireAuth>
             }
           />
-  
+     {/* Página dedicada de evaluación (reemplaza el modal) */}
+          <Route
+            path="/evaluacion/:plantillaId/:periodo/:empleadoId?"
+            element={
+              <RequireAuth
+                allow={['superadmin','directivo','rrhh','jefe_area','jefe_sector']}
+                allowReferente={true}
+              >
+                <EvaluacionFlujo />
+              </RequireAuth>
+            }
+          />
 
 
           <Route
@@ -129,10 +141,13 @@ element={<RequireAuth allow={['directivo','rrhh','jefe_area','jefe_sector','supe
     </RequireAuth>
   }
 />
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+        
+
 
             <Route path="/403" element={<Forbidden />} />
+
+  {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
       <ToastContainer position="top-left" autoClose={2200} theme="colored" newestOnTop />
