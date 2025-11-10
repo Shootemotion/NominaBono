@@ -58,9 +58,11 @@ if (Array.isArray(metasResultados) && metasResultados.length > 0) {
       periodo,
       actual: nuevoActual,
       escala,
- comentarioManager: comentario,
+comentarioManager: req.body.comentarioManager ?? null,
  comentario: req.body.comentario ?? null,
       metasResultados: metasProcesadas,
+      // ⚠️ clave: si el manager edita, dejamos esto en borrador
+      estado: "MANAGER_DRAFT",
     };
 
     // Target de empleados
@@ -143,9 +145,11 @@ export const updateHitoMultiple = async (req, res) => {
       periodo,
       actual: nuevoActual,
       escala,
-      comentarioManager: comentario,
+      comentarioManager: req.body.comentarioManager ?? null,
       comentario: req.body.comentario ?? null,
       metasResultados: metasProcesadas,
+      // ⚠️ clave: si el manager edita, dejamos esto en borrador
+      estado: "MANAGER_DRAFT",
     };
 
     const results = await Promise.all(
