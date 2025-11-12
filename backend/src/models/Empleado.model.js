@@ -14,7 +14,12 @@ const empleadoSchema = new mongoose.Schema(
     puesto: { type: String, required: true, trim: true },
     celular: { type: String },
     categoria: { type: String },
-
+ estadoLaboral: {
+   type: String,
+   enum: ["ACTIVO", "SUSPENDIDO", "DESVINCULADO"],
+   default: "ACTIVO",
+ },
+ cvUrl: { type: String, default: null },
     // 💰 Sueldo con historial versionado
     sueldoBase: {
       monto: { type: Number, default: 0 },
