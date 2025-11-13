@@ -1,4 +1,3 @@
-// src/components/FormularioEmpleado.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { API_ORIGIN } from "@/lib/api";
@@ -7,15 +6,14 @@ import { Pencil } from "lucide-react";
 /* ===================== Helpers ===================== */
 const resolveUrl = (u) => {
   if (!u) return null;
-  if (/^https?:\/\//i.test(u)) return u;           // ya es absoluta
+  if (/^https?:\/\//i.test(u)) return u; // absoluta
   const base = (typeof API_ORIGIN === "string" && API_ORIGIN) ? API_ORIGIN : window.location.origin;
-  const cleanBase = String(base).replace(/\/+$/, "");
-  const cleanPath = String(u).replace(/^\/+/, ""); // sin "/" inicial
-  return `${cleanBase}/${cleanPath}`;
+  return `${String(base).replace(/\/+$/, "")}/${String(u).replace(/^\/+/, "")}`;
 };
 
 const isEmpty = (v) => v === undefined || v === null || String(v).trim() === "";
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
+const isDigits = (v) => /^\d+$/.test(String(v || "").trim());
 
 const fieldLabel = {
   nombre: "Nombre",
@@ -38,6 +36,8 @@ export default function FormularioEmpleado({
   empleadoInicial = null,
   areas = [],
   sectores = [],
+  opcionesPuesto = [],
+  opcionesCategoria = ["Staff", "Profesional", "Jefatura", "Gerencia", "Dirección"],
 }) {
   // ---------- Estado de datos ----------
   const [nombre, setNombre] = useState("");
@@ -50,13 +50,14 @@ export default function FormularioEmpleado({
   const [fechaIngreso, setFechaIngreso] = useState("");
   const [domicilio, setDomicilio] = useState("");
   const [puesto, setPuesto] = useState("");
-  const [categoria, setCategoria] = useState(""); // opcional
-  const [areaId, setAreaId] = useState("");
+  const [categoria, setCategoria] = useState("");
+  const [areaId, setAreaId] = useState("");   // ⬅ por defecto vacío (consistente con Legajo)
   const [sectorId, setSectorId] = useState("");
   const [foto, setFoto] = useState(null);
 
   // Errores por campo
   const [errors, setErrors] = useState({});
+
   // Refs para enfocar el primer error
   const refs = {
     nombre: useRef(null),
@@ -83,10 +84,20 @@ export default function FormularioEmpleado({
     () => resolveUrl(empleadoInicial?.fotoUrl),
     [empleadoInicial?.fotoUrl]
   );
-  const previewFoto = useMemo(
-    () => (foto ? URL.createObjectURL(foto) : fotoExistente || null),
-    [foto, fotoExistente]
-  );
+  const [objectUrl, setObjectUrl] = useState(null);
+  const previewFoto = foto
+    ? objectUrl
+    : (fotoExistente || null);
+
+  useEffect(() => {
+    if (!foto) return;
+    const url = URL.createObjectURL(foto);
+    setObjectUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+      setObjectUrl(null);
+    };
+  }, [foto]);
 
   // ---------- Cargar datos iniciales ----------
   useEffect(() => {
@@ -107,8 +118,8 @@ export default function FormularioEmpleado({
       );
       setPuesto(empleadoInicial.puesto || "");
       setCategoria(empleadoInicial.categoria || "");
-      setAreaId(empleadoInicial.area?._id || "");
-      setSectorId(empleadoInicial.sector?._id || "");
+      setAreaId(empleadoInicial.area?._id || empleadoInicial.area || "");
+      setSectorId(empleadoInicial.sector?._id || empleadoInicial.sector || "");
       setFoto(null);
       setEditNombre(false);
       setEditApellido(false);
@@ -126,7 +137,7 @@ export default function FormularioEmpleado({
       setFechaIngreso("");
       setPuesto("");
       setCategoria("");
-      if (areas.length > 0) setAreaId(areas[0]._id);
+      setAreaId("");     // ⬅ no autoseleccionar primer área
       setSectorId("");
       setFoto(null);
       setEditNombre(true);
@@ -134,7 +145,7 @@ export default function FormularioEmpleado({
       setEditPuesto(true);
       setEditCategoria(true);
     }
-  }, [empleadoInicial, areas]);
+  }, [empleadoInicial]);
 
   // ---------- Sectores del área + validación ----------
   const sectoresDelArea = useMemo(() => {
@@ -143,11 +154,10 @@ export default function FormularioEmpleado({
     return lista.filter((s) => String(s?.areaId?._id ?? s?.areaId ?? "") === id);
   }, [sectores, areaId]);
 
+  // reset de sector si cambia el área
   useEffect(() => {
-    if (!sectorId) return;
-    const sigue = sectoresDelArea.some((s) => String(s._id) === String(sectorId));
-    if (!sigue) setSectorId("");
-  }, [sectorId, sectoresDelArea]);
+    setSectorId(""); // ⬅ resetea siempre para evitar “desincronización”
+  }, [areaId]);
 
   // ---------- Validación ----------
   const validate = () => {
@@ -155,10 +165,16 @@ export default function FormularioEmpleado({
 
     if (isEmpty(nombre)) next.nombre = "Ingresá el nombre.";
     if (isEmpty(apellido)) next.apellido = "Ingresá el apellido.";
+
     if (isEmpty(dni)) next.dni = "Ingresá el DNI.";
+    else if (!isDigits(dni)) next.dni = "El DNI debe tener solo números.";
+
     if (isEmpty(cuil)) next.cuil = "Ingresá el CUIL.";
+    else if (!/^\d{11}$/.test(String(cuil))) next.cuil = "El CUIL debe tener 11 dígitos.";
+
     if (isEmpty(email)) next.email = "Ingresá el email.";
     else if (!isValidEmail(email)) next.email = "El email no es válido.";
+
     if (isEmpty(fechaIngreso)) next.fechaIngreso = "Seleccioná la fecha de ingreso.";
     if (isEmpty(puesto)) next.puesto = "Seleccioná el puesto.";
     if (isEmpty(areaId)) next.areaId = "Seleccioná el área.";
@@ -179,16 +195,14 @@ export default function FormularioEmpleado({
       r.current.focus();
       r.current.scrollIntoView({ block: "center", behavior: "smooth" });
     }
-  }, [errors]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errors]);
 
   // ---------- Guardar ----------
   const handleSubmit = (e) => {
     e.preventDefault();
     const issues = validate();
-    if (Object.keys(issues).length) {
-      // Nada de grises: te digo exactamente qué falta.
-      return;
-    }
+    if (Object.keys(issues).length) return;
 
     onGuardar({
       nombre,
@@ -215,8 +229,8 @@ export default function FormularioEmpleado({
         : "border-border focus-visible:ring-ring"
     }`;
 
-  /* ---------- Opciones ejemplo ---------- */
-  const opcionesPuesto = [
+  /* ---------- Opciones por defecto de Puesto (si no envías por props) ---------- */
+  const defaultOpcionesPuesto = [
     "Director General",
     "Director Financiero, Administración e Innovación",
     "Director Recursos Humanos",
@@ -244,8 +258,7 @@ export default function FormularioEmpleado({
     "Coordinador de Calidad",
     "Analista de Finanzas",
   ];
-
-  const opcionesCategoria = ["Staff", "Profesional", "Jefatura", "Gerencia", "Dirección"];
+  const puestos = opcionesPuesto.length ? opcionesPuesto : defaultOpcionesPuesto;
 
   /* ======================== UI ======================== */
   const resumenErrores = Object.keys(errors).map((k) => fieldLabel[k]).filter(Boolean);
@@ -262,12 +275,7 @@ export default function FormularioEmpleado({
 
       {/* HEADER: Foto a la izquierda + campos inline a la derecha */}
       <div className="-mx-4 -mt-4 px-4 pt-4 pb-4 border-b bg-muted/20 rounded-t-xl">
-        <div
-          className="
-            grid gap-4 items-center
-            grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr]
-          "
-        >
+        <div className="grid gap-4 items-center grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr]">
           {/* Foto cuadrada */}
           <label className="relative group cursor-pointer">
             <div className="w-[120px] sm:w-[160px] aspect-square rounded-xl overflow-hidden ring-1 ring-border bg-background shadow-sm">
@@ -294,7 +302,6 @@ export default function FormularioEmpleado({
           <div className="flex flex-col gap-2">
             {/* NOMBRE + APELLIDO (inline) */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              {/* Nombre */}
               <InlineEditable
                 refInput={refs.nombre}
                 value={nombre}
@@ -305,8 +312,6 @@ export default function FormularioEmpleado({
                 onBlur={() => setEditNombre(false)}
                 error={errors.nombre}
               />
-
-              {/* Apellido */}
               <InlineEditable
                 refInput={refs.apellido}
                 value={apellido}
@@ -325,7 +330,7 @@ export default function FormularioEmpleado({
                 refSelect={refs.puesto}
                 label="Puesto"
                 value={puesto}
-                options={opcionesPuesto}
+                options={puestos}
                 placeholder="Seleccionar puesto"
                 editing={editPuesto}
                 onEdit={() => setEditPuesto(true)}
@@ -370,6 +375,7 @@ export default function FormularioEmpleado({
             onChange={(e) => setDni(e.target.value)}
             required
             aria-invalid={!!errors.dni}
+            inputMode="numeric"
           />
           {errors.dni && <p className="mt-1 text-xs text-red-600">{errors.dni}</p>}
         </div>
@@ -382,6 +388,8 @@ export default function FormularioEmpleado({
             onChange={(e) => setCuil(e.target.value)}
             required
             aria-invalid={!!errors.cuil}
+            inputMode="numeric"
+            maxLength={11}
           />
           {errors.cuil && <p className="mt-1 text-xs text-red-600">{errors.cuil}</p>}
         </div>
@@ -457,6 +465,7 @@ export default function FormularioEmpleado({
             required
             aria-invalid={!!errors.areaId}
           >
+            <option value="">{areas.length ? "Seleccione un área" : "No hay áreas"}</option>
             {areas.map((a) => (
               <option key={a._id} value={a._id}>
                 {a.nombre}
@@ -474,9 +483,10 @@ export default function FormularioEmpleado({
             onChange={(e) => setSectorId(e.target.value)}
             required
             aria-invalid={!!errors.sectorId}
+            disabled={!areaId || !sectoresDelArea.length}
           >
-            <option value="" disabled>
-              {sectoresDelArea.length ? "Seleccione un sector" : "No hay sectores"}
+            <option value="">
+              {!areaId ? "Elegí un área primero" : (sectoresDelArea.length ? "Seleccione un sector" : "Sin sectores")}
             </option>
             {sectoresDelArea.map((s) => (
               <option key={s._id} value={s._id}>
@@ -551,9 +561,7 @@ function InlineSelect({
         <select
           ref={refSelect}
           autoFocus
-          className={`rounded-full border px-3 py-1 text-sm bg-background ${
-            error ? "border-red-500" : ""
-          }`}
+          className={`rounded-full border px-3 py-1 text-sm bg-background ${error ? "border-red-500" : ""}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}

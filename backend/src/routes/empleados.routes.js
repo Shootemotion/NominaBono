@@ -9,6 +9,8 @@ import {
   actualizarSueldoEmpleado,
 } from '../controllers/empleados.controller.js';
 import { requireCap } from '../auth/auth.middleware.js';
+import { listCarrera, createCarrera, updateCarrera, deleteCarrera } from "../controllers/carrera.controller.js";
+import { listCapacitaciones, createCapacitacion, updateCapacitacion, deleteCapacitacion } from "../controllers/capacitacion.controller.js";
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
@@ -161,4 +163,58 @@ router.post(
   upload.single('foto'),
   subirFotoEmpleado
 );
+
+
+
+
+
+/* ========== uploads certificados (capacitaciones) ========== */
+const storageCert = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const emp = req.empleado;
+    const legible = `${slugify(emp.apellido)}-${slugify(emp.nombre)}-${emp._id}`;
+    const dir = path.join(process.cwd(), "uploads", "empleados", legible, "certificados");
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || ".pdf").toLowerCase();
+    cb(null, `cert-${Date.now()}${ext}`);
+  }
+});
+const uploadCert = multer({
+  storage: storageCert,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /pdf|doc|docx/i.test(file.mimetype) || /\.(pdf|doc|docx)$/i.test(file.originalname || "");
+    if (!ok) return cb(new Error("Formato no permitido (PDF/DOC/DOCX)"));
+    cb(null, true);
+  }
+});
+
+/* ========== CARRERA (historial de puestos) ========== */
+router.get("/:id/carrera",
+  requireCap("nomina:ver"), assertObjectId, preloadEmpleado, listCarrera);
+
+router.post("/:id/carrera",
+  requireCap("nomina:editar"), assertObjectId, preloadEmpleado, createCarrera);
+
+router.put("/:id/carrera/:itemId",
+  requireCap("nomina:editar"), assertObjectId, updateCarrera);
+
+router.delete("/:id/carrera/:itemId",
+  requireCap("nomina:editar"), assertObjectId, deleteCarrera);
+
+/* ========== CAPACITACIONES ========== */
+router.get("/:id/capacitaciones",
+  requireCap("nomina:ver"), assertObjectId, preloadEmpleado, listCapacitaciones);
+
+router.post("/:id/capacitaciones",
+  requireCap("nomina:editar"), assertObjectId, preloadEmpleado, uploadCert.single("certificado"), createCapacitacion);
+
+router.put("/:id/capacitaciones/:itemId",
+  requireCap("nomina:editar"), assertObjectId, uploadCert.single("certificado"), updateCapacitacion);
+
+router.delete("/:id/capacitaciones/:itemId",
+  requireCap("nomina:editar"), assertObjectId, deleteCapacitacion);
 export default router;
