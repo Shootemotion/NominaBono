@@ -520,10 +520,29 @@ grouped = [],
               empleados: new Map(),
             });
           }
-          const entry = b.objetivos.get(itemId);
-          (it.empleados || []).forEach((e) => {
-            if (e?._id) entry.empleados.set(String(e._id), e);
-          });
+     const entry = b.objetivos.get(itemId);
+
+// Normalizamos empleados: soportar it.empleados (array), it.empleado (uno solo)
+// y como último fallback, los empleados del grupo g (por si vienen sólo ahí).
+let empleadosSrc = [];
+
+if (Array.isArray(it.empleados)) {
+  empleadosSrc = it.empleados;
+} else if (it.empleado) {
+  empleadosSrc = [it.empleado];
+}
+
+// Fallback: si el item no trae empleados pero el grupo sí los tiene asociados
+if ((!empleadosSrc || empleadosSrc.length === 0) && g.empleados && typeof g.empleados.values === "function") {
+  empleadosSrc = Array.from(g.empleados.values());
+}
+
+(empleadosSrc || []).forEach((e) => {
+  if (e?._id) {
+    entry.empleados.set(String(e._id), e);
+  }
+});
+
         });
       });
 

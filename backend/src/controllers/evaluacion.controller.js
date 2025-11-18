@@ -325,21 +325,26 @@ export async function submitToEmployee(req, res) {
 export async function employeeAck(req, res) {
   try {
     const { id } = req.params;
+    const { comentarioEmpleado } = req.body || {};
+
     const ev = await Evaluacion.findById(id);
     if (!ev) return res.status(404).json({ message: "Evaluación no encontrada" });
-    if (ev.estado !== "PENDING_EMPLOYEE") {
-      return res.status(409).json({ message: "Estado inválido para ACK" });
-    }
+if (!["PENDING_EMPLOYEE", "MANAGER_DRAFT"].includes(ev.estado)) {
+  return res.status(409).json({ message: "Estado inválido para ACK" });
+}
 
-    // seguridad: solo el dueño puede confirmar
     const userEmpId = String(req.user?.empleadoId?._id || req.user?.empleadoId);
     if (!userEmpId || String(ev.empleado) !== userEmpId) {
       return res.status(403).json({ message: "No autorizado (ACK solo por el empleado)" });
     }
 
+    if (comentarioEmpleado !== undefined) {
+      ev.comentarioEmpleado = comentarioEmpleado || ev.comentarioEmpleado || "";
+    }
+
     ev.empleadoAck = { estado: "ACK", fecha: new Date(), userId: req.user?._id };
-    ev.estado = "PENDING_HR"; // si no usás HR, podrías pasar directo a CLOSED
-    pushTimeline(ev, { by: req.user?._id, action: "EMPLOYEE_ACK" });
+    ev.estado = "PENDING_HR";
+    pushTimeline(ev, { by: req.user?._id, action: "EMPLOYEE_ACK", note: comentarioEmpleado });
     await ev.save();
     res.json(ev);
   } catch (e) {
@@ -354,10 +359,9 @@ export async function employeeContest(req, res) {
     const { comentarioEmpleado } = req.body || {};
     const ev = await Evaluacion.findById(id);
     if (!ev) return res.status(404).json({ message: "Evaluación no encontrada" });
-    if (ev.estado !== "PENDING_EMPLOYEE") {
-      return res.status(409).json({ message: "Estado inválido para contestar" });
-    }
-
+if (!["PENDING_EMPLOYEE", "MANAGER_DRAFT"].includes(ev.estado)) {
+  return res.status(409).json({ message: "Estado inválido para contestar" });
+}
     const userEmpId = String(req.user?.empleadoId?._id || req.user?.empleadoId);
     if (!userEmpId || String(ev.empleado) !== userEmpId) {
       return res.status(403).json({ message: "No autorizado (solo el empleado puede contestar)" });
