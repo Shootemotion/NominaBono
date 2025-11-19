@@ -275,11 +275,12 @@ export default function GestionPlantillasPage() {
   const hook = usePlantillas(hookParams);
   const { loading, reload, addLocal, updateLocal, removeLocal } = hook;
 
-  const [plantillasByEmp, setPlantillasByEmp] = useState(null); // empleado
+    const [plantillasByEmpRaw, setPlantillasByEmpRaw] = useState(null); // sin filtrar por overrides
   const [plantillasSector, setPlantillasSector] = useState(null); // cascada sector+área
   const [allPlantillas, setAllPlantillas] = useState(null); // modo “todas”
-
+  const [empOverrides, setEmpOverrides] = useState([]); // overrides del empleado/año
   // Helper para normalizar respuestas a array
+
   const norm = (res) =>
     Array.isArray(res)
       ? res
@@ -351,11 +352,12 @@ export default function GestionPlantillasPage() {
     })();
   }, [year, scopeType, scopeId, empleadoId, sectores]);
 
-  // 🔁 Empleado: empleado + sector + área
+
+  // 🔁 Empleado: empleado + sector + área (sin aplicar overrides todavía)
   useEffect(() => {
     (async () => {
       if (!empleadoId) {
-        setPlantillasByEmp(null);
+        setPlantillasByEmpRaw(null);
         return;
       }
       try {
@@ -407,14 +409,55 @@ export default function GestionPlantillasPage() {
             return acc;
           }, {})
         );
-        setPlantillasByEmp(uniq);
+        setPlantillasByEmpRaw(uniq);
       } catch (e) {
         console.error(e);
         toast.error("No se pudieron cargar plantillas del empleado");
-        setPlantillasByEmp([]);
+        setPlantillasByEmpRaw([]);
       }
     })();
   }, [empleadoId, selectedEmpleado, year]);
+
+  // Aplica overrides del empleado a las plantillas heredadas (oculta excluidas y marca overrides)
+  const plantillasByEmp = useMemo(() => {
+    if (plantillasByEmpRaw === null) return null;
+    if (!empleadoId) return plantillasByEmpRaw;
+
+    if (!empOverrides || empOverrides.length === 0) return plantillasByEmpRaw;
+
+    const withOv = plantillasByEmpRaw.map((tpl) => {
+      const ov = empOverrides.find(
+        (o) =>
+          String(o.template) === String(tpl._id) &&
+          String(o.empleado) === String(empleadoId) &&
+          Number(o.year) === Number(year)
+      );
+
+      if (!ov) return tpl;
+
+      const basePeso = Number(tpl.pesoBase ?? 0);
+      const hasPesoOverride =
+        ov.peso !== null &&
+        ov.peso !== undefined &&
+        Number(ov.peso) !== basePeso;
+
+      const baseMeta = tpl.target;
+      const hasMetaOverride =
+        ov.meta !== null &&
+        ov.meta !== undefined &&
+        ov.meta !== baseMeta;
+
+      return {
+        ...tpl,
+        __override: ov,
+        __excluido: !!ov.excluido,
+        __hasOverride: !ov.excluido && (hasPesoOverride || hasMetaOverride),
+      };
+    });
+
+    // 💥 acá se ocultan los excluidos
+    return withOv.filter((tpl) => !tpl.__excluido);
+  }, [plantillasByEmpRaw, empOverrides, empleadoId, year]);
 
   // 🔁 Fallback: TODAS (unión area/sector/empleado) cuando no hay alcance ni empleado
   useEffect(() => {
@@ -453,6 +496,31 @@ export default function GestionPlantillasPage() {
       }
     })();
   }, [year, tipoFiltro, empleadoId, scopeType, scopeId]);
+
+
+
+    // Overrides específicos del empleado seleccionado
+  useEffect(() => {
+    (async () => {
+      if (!empleadoId) {
+        setEmpOverrides([]);
+        return;
+      }
+      try {
+        const data = await api(
+          `/overrides?${qsFromObj({
+            year,
+            empleado: empleadoId,
+          })}`
+        );
+        setEmpOverrides(normAny(data));
+      } catch (e) {
+        console.error(e);
+        toast.error("No se pudieron cargar overrides del empleado");
+        setEmpOverrides([]);
+      }
+    })();
+  }, [empleadoId, year]);
 
   const plantillas = useMemo(() => {
     if (plantillasByEmp !== null) return plantillasByEmp;

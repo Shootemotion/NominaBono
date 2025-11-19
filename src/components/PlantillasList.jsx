@@ -34,7 +34,16 @@ export default function PlantillasList({
         const proceso = p.proceso || "—";
         const frecuencia = p.frecuencia || p.frequency || "—";
         const activo = p.activo !== false; // por defecto activo si no existe
-
+ const hasOverride =
+          p.__hasOverride ||
+          (!!p.__override &&
+            !p.__override.excluido &&
+            (
+              p.__override.peso !== null &&
+              p.__override.peso !== undefined ||
+              p.__override.meta !== null &&
+              p.__override.meta !== undefined
+            ));
         // clase común para TODAS las “píldoras” para que queden del mismo alto
         const pill = "inline-flex items-center h-6 px-2 rounded-full text-[11px] ring-1";
 
@@ -46,8 +55,15 @@ export default function PlantillasList({
             <div className="flex items-start justify-between gap-4">
               {/* Izquierda */}
               <div className="min-w-0">
-                {/* Título */}
-                <div className="font-semibold truncate">{p.nombre}</div>
+         {/* Título */}
+                <div className="font-semibold truncate flex items-center gap-2">
+                  <span className="truncate">{p.nombre}</span>
+                  {hasOverride && (
+                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-amber-100 text-amber-700 text-[10px] ring-1 ring-amber-200">
+                      Override
+                    </span>
+                  )}
+                </div>
 
                 {/* Píldoras principales bajo el título */}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
