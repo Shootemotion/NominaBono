@@ -443,6 +443,7 @@ export async function reopenEvaluacion(req, res) {
 
 
 
+// src/controllers/evaluacion.controller.js
 export async function listPendingHR(req, res) {
   try {
     const { periodo, plantillaId } = req.query;
@@ -451,25 +452,46 @@ export async function listPendingHR(req, res) {
     if (plantillaId) q.plantillaId = new mongoose.Types.ObjectId(String(plantillaId));
 
     const items = await Evaluacion.find(q)
-      .populate({ path: "empleado", select: "nombre apellido area sector", populate: [
-        { path: "area", select: "nombre" },
-        { path: "sector", select: "nombre" },
-      ]})
-      .populate({ path: "manager", select: "nombre apellido email" })
-      .populate({ path: "plantillaId", select: "nombre" })
+      .populate({
+        path: "empleado",
+        select: "nombre apellido area sector",
+        populate: [
+          { path: "area", select: "nombre" },
+          { path: "sector", select: "nombre" },
+        ],
+      })
+      .populate({
+        path: "manager",      // ahora ref: "Usuario"
+        select: "nombre apellido email",
+      })
+      .populate({
+        path: "plantillaId",
+        select: "nombre fechaLimite",
+      })
       .lean();
 
-   // Devolver con alias consistentes
     const mapped = items.map(ev => ({
       ...ev,
-      plantilla: ev.plantillaId ? { _id: ev.plantillaId._id, nombre: ev.plantillaId.nombre } : null,
+      plantilla: ev.plantillaId
+        ? {
+            _id: ev.plantillaId._id,
+            nombre: ev.plantillaId.nombre,
+            fechaLimite: ev.plantillaId.fechaLimite || null,
+          }
+        : null,
     }));
+
+    // Para que veas qué viene
+    console.log("🔎 listPendingHR ejemplo:", mapped[0]);
+
     res.json(mapped);
   } catch (e) {
     console.error("listPendingHR error", e);
     res.status(500).json({ message: e.message || "Error listando pendientes" });
   }
 }
+
+
 
 export async function closeBulk(req, res) {
   try {
