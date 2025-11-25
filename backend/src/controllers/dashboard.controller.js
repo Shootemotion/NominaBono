@@ -104,6 +104,7 @@ async function computeForEmployees(empleadoIds, anio) {
               ...h,
               actual: evHito?.actual ?? null,
               comentario: evHito?.comentario ?? "",
+              estado: evHito?.estado ?? null,
               metas: metasCombinadas, // ✅ metas evaluadas por hito
             };
           })
@@ -343,6 +344,7 @@ export const dashByEmpleado = async (req, res, next) => {
             ...h,
             actual: evHito?.actual ?? null,
             comentario: evHito?.comentario ?? "",
+            estado: evHito?.estado ?? null,
             metas: metasCombinadas,
           };
         })

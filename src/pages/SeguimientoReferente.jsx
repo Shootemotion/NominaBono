@@ -12,37 +12,87 @@ import { Button } from "@/components/ui/button";
 
 /* ========= utils de agrupación/normalización ========= */
 
-function flatItemsFromRow(row, tipoFiltro) {
-  const out = [];
-  const emp = row.empleado;
-  if (!emp) return out;
-
-  const pushItems = (items, _tipo) => {
-    for (const it of items || []) {
-      const metasCount =
-        Array.isArray(it?.metas) ? it.metas.length :
-        Array.isArray(it?.rawItem?.metas) ? it.rawItem.metas.length :
-        (Number.isFinite(it?.metasCount) ? it.metasCount : 0);
-      out.push({
-        _id: it._id,
-        _tipo,
-        nombre: it.nombre,
-        peso: it.pesoBase ?? it.peso ?? null,
-        empleados: [emp],
-        area: emp.area || null,
-        sector: emp.sector || null,
-        hitos: Array.isArray(it.hitos) ? it.hitos : [],
-        rawItem: it,
-        metasCount, 
-      });
-    }
-  };
-
-  if (tipoFiltro !== "aptitud") pushItems(row.objetivos?.items, "objetivo");
-  if (tipoFiltro !== "objetivo") pushItems(row.aptitudes?.items, "aptitud");
-  return out;
+// Helper seguro para obtener array de items
+function getItemsArray(source) {
+  if (!source) return [];
+  if (Array.isArray(source)) return source;
+  if (Array.isArray(source.items)) return source.items;
+  return [];
 }
 
+function flatItemsFromRow(row, tipoFiltro) {
+  const out = [];
+
+  // 1. Intentar obtener el empleado del objeto
+  // Puede venir directo en 'row.empleado' o dentro de un array 'row.empleados'
+  let emp = row.empleado;
+  if (!emp && Array.isArray(row.empleados) && row.empleados.length > 0) {
+    emp = row.empleados[0];
+  }
+
+  // Si no hay datos de empleado, esta fila no sirve
+  if (!emp || !emp._id) return out;
+
+  // ---------------------------------------------------------
+  // ESTRATEGIA A: La fila es un DASHBOARD (Contiene listas)
+  // (Esto pasa con dashEmpleado o si dashArea agrupa por persona)
+  // ---------------------------------------------------------
+  if (row.objetivos || row.aptitudes) {
+    const pushItems = (itemsSource, _tipo) => {
+      const lista = getItemsArray(itemsSource); // Usamos el helper seguro
+
+      for (const it of lista) {
+        out.push({
+          _id: it._id,
+          _tipo,
+          nombre: it.nombre,
+          peso: it.pesoBase ?? it.peso ?? null,
+          empleados: [emp],
+          area: emp.area || null,
+          sector: emp.sector || null,
+          hitos: Array.isArray(it.hitos) ? it.hitos : [],
+          rawItem: it,
+          metasCount: Array.isArray(it.metas) ? it.metas.length : 0,
+        });
+      }
+    };
+
+    if (tipoFiltro !== "aptitud") pushItems(row.objetivos, "objetivo");
+    if (tipoFiltro !== "objetivo") pushItems(row.aptitudes, "aptitud");
+
+    return out;
+  }
+
+  // ---------------------------------------------------------
+  // ESTRATEGIA B: La fila es un ITEM SUELTO (Objetivo directo)
+  // (Esto pasa si dashArea devuelve una lista plana de objetivos)
+  // ---------------------------------------------------------
+  // Si tiene nombre y un ID, asumimos que ES el item
+  if (row.nombre && row._id) {
+    // Detectar tipo (o asumir objetivo por defecto)
+    const myTipo = row._tipo || row.tipo || "objetivo";
+
+    // Aplicar filtro
+    if (tipoFiltro !== "todos" && tipoFiltro !== myTipo) return out;
+
+    out.push({
+      _id: row._id,
+      _tipo: myTipo,
+      nombre: row.nombre,
+      peso: row.pesoBase ?? row.peso ?? null,
+      empleados: [emp],
+      area: emp.area || null,
+      sector: emp.sector || null,
+      hitos: Array.isArray(row.hitos) ? row.hitos : [],
+      rawItem: row,
+      metasCount: Array.isArray(row.metas) ? row.metas.length : 0,
+    });
+
+    return out;
+  }
+
+  return out;
+}
 // agrupa por clave dinámica y fusiona (sin duplicar) empleados/áreas/sectores/períodos
 function groupItems(items, mode = "item") {
   const keyOf = (x) => {
@@ -53,14 +103,13 @@ function groupItems(items, mode = "item") {
     return `${x._tipo}:${x._id}`;
   };
 
- const labelOf = (x) => {
+  const labelOf = (x) => {
     if (mode === "empleado")
       return `${x.empleados?.[0]?.apellido || ""} ${x.empleados?.[0]?.nombre || ""}`.trim();
     if (mode === "area") return x.area?.nombre || "Sin área";
     if (mode === "sector") return x.sector?.nombre || "Sin sector";
-    return x.nombre; // sin emojis, limpio
+    return x.nombre;
   };
-
 
   const map = new Map();
   for (const it of items) {
@@ -69,31 +118,30 @@ function groupItems(items, mode = "item") {
       map.set(k, {
         key: k,
         title: labelOf(it),
-        kind: mode,  
-        // metadata resumida
+        kind: mode, // "item" | "empleado" | "area" | "sector"
         _tipo: it._tipo,
         items: [],
-        empleados: new Map(), // id -> obj
-        areas: new Map(),     // id -> nombre
-        sectores: new Map(),  // id -> nombre
+        empleados: new Map(),
+        areas: new Map(),
+        sectores: new Map(),
         periodos: new Set(),
       });
     }
     const g = map.get(k);
     g.items.push(it);
 
-    // merge empleados/área/sector/períodos
     for (const e of it.empleados || []) g.empleados.set(String(e._id), e);
-    if (it.area) g.areas.set(String(it.area._id || it.area), it.area?.nombre || "—");
-    if (it.sector) g.sectores.set(String(it.sector._id || it.sector), it.sector?.nombre || "—");
+    if (it.area)
+      g.areas.set(String(it.area._id || it.area), it.area?.nombre || "—");
+    if (it.sector)
+      g.sectores.set(String(it.sector._id || it.sector), it.sector?.nombre || "—");
     for (const h of it.hitos || []) g.periodos.add(h.periodo);
   }
 
-  // salida ordenada por título
   return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-/* ===================================================== */
+/* ===================== Página ===================== */
 
 export default function SeguimientoReferente() {
   const { user } = useAuth();
@@ -109,8 +157,10 @@ export default function SeguimientoReferente() {
   const esVisor = user?.rol === "visor";
   const puedeVer = esReferente || esDirector || esSuperAdmin || esVisor;
 
+  const currentYear = new Date().getFullYear();
+
   // estado
-  const [anio, setAnio] = useState(new Date().getFullYear());
+  const [anio, setAnio] = useState(currentYear);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -123,38 +173,73 @@ export default function SeguimientoReferente() {
   const [tipoFiltro, setTipoFiltro] = useState("todos");
   const [view, setView] = useState("gantt");
   const [zoom, setZoom] = useState("mes");
-const [dueOnly, setDueOnly] = useState(false);   // <-- mueve estos acá
- const [sortDir, setSortDir] = useState("asc");
-  // NUEVO: modo de agrupación
-  const [groupBy, setGroupBy] = useState("empleado"); // "item" | "empleado" | "area" | "sector"
+  const [dueOnly, setDueOnly] = useState(false);
+  const [sortDir, setSortDir] = useState("asc");
+  const [groupBy, setGroupBy] = useState("empleado");
 
+  // carga de datos robusta
   useEffect(() => {
     if (!puedeVer) return;
     (async () => {
       try {
         setLoading(true);
-        let data = [];
+        let rawResponses = [];
 
+        // 1. Recolectar respuestas crudas según rol
         if (esReferente) {
           if (user?.referenteAreas?.length) {
-            const results = await Promise.all(user.referenteAreas.map((a) => dashArea(a, anio)));
-            data = results.flat();
+            const results = await Promise.all(
+              user.referenteAreas.map((a) => dashArea(a, anio))
+            );
+            rawResponses = results.flat();
           } else if (user?.referenteSectors?.length) {
-            const results = await Promise.all(user.referenteSectors.map((s) => dashSector(s, anio)));
-            data = results.flat();
+            const results = await Promise.all(
+              user.referenteSectors.map((s) => dashSector(s, anio))
+            );
+            rawResponses = results.flat();
           }
         } else if (esDirector) {
-          const [allAreas, allSectores] = await Promise.all([dashArea(null, anio), dashSector(null, anio)]);
-          data = [...allAreas, ...allSectores];
+          const [allAreas, allSectores] = await Promise.all([
+            dashArea(null, anio),
+            dashSector(null, anio),
+          ]);
+          rawResponses = [...allAreas, ...allSectores];
         } else if (esVisor && user?.empleado?._id) {
-          const resp = await api(`/dashboard/empleado/${user.empleado._id}?year=${anio}`);
-          data = Array.isArray(resp) ? resp : [resp];
+          const resp = await api(
+            `/dashboard/empleado/${user.empleado._id}?year=${anio}`
+          );
+          rawResponses = Array.isArray(resp) ? resp : [resp];
         }
 
-        setRows(data || []);
+        // 2. Aplanar la estructura (Normalización)
+        // El backend puede devolver: [Item, Item] O [{items: [...]}] O [Dashboard, Dashboard]
+        let flatRows = [];
+
+        const processEntry = (entry) => {
+          if (!entry) return;
+
+          // Caso: Objeto contenedor con propiedad 'items' (común en respuestas paginadas o de área)
+          if (Array.isArray(entry.items)) {
+            entry.items.forEach(sub => processEntry(sub));
+            return;
+          }
+
+          // Caso: Array anidado
+          if (Array.isArray(entry)) {
+            entry.forEach(sub => processEntry(sub));
+            return;
+          }
+
+          // Caso: Objeto válido (Dashboard o Item)
+          flatRows.push(entry);
+        };
+
+        rawResponses.forEach(r => processEntry(r));
+
+        setRows(flatRows);
       } catch (e) {
         console.error(e);
-        toast.error("Error al cargar empleados para seguimiento.");
+        toast.error("Error al cargar datos.");
       } finally {
         setLoading(false);
       }
@@ -167,7 +252,8 @@ const [dueOnly, setDueOnly] = useState(false);   // <-- mueve estos acá
         <div className="max-w-3xl mx-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-200 p-6 text-center">
           <h2 className="text-lg font-semibold mb-1">Acceso restringido</h2>
           <p className="text-sm text-slate-600">
-            Necesitás ser referente, directivo/RRHH o tener un usuario activo con objetivos propios.
+            Necesitás ser referente, directivo/RRHH o tener un usuario activo
+            con objetivos propios.
           </p>
         </div>
       </div>
@@ -199,7 +285,7 @@ const [dueOnly, setDueOnly] = useState(false);   // <-- mueve estos acá
     return [{ _id: "todos", nombre: "Todos" }, ...Array.from(s.values())];
   }, [rows]);
 
-  // hints del buscador (arreglado + debounce simple)
+  // hints del buscador
   const empHints = useMemo(() => {
     const t = empQuery.trim().toLowerCase();
     if (!t) return [];
@@ -211,7 +297,11 @@ const [dueOnly, setDueOnly] = useState(false);   // <-- mueve estos acá
       const label = `${e.apellido || ""} ${e.nombre || ""}`.trim();
       const sec = (e.sector?.nombre || "").toLowerCase();
       const ar = (e.area?.nombre || "").toLowerCase();
-      if (label.toLowerCase().includes(t) || sec.includes(t) || ar.includes(t)) {
+      if (
+        label.toLowerCase().includes(t) ||
+        sec.includes(t) ||
+        ar.includes(t)
+      ) {
         if (!mapa.has(id)) {
           mapa.set(id, {
             _id: id,
@@ -229,13 +319,23 @@ const [dueOnly, setDueOnly] = useState(false);   // <-- mueve estos acá
   const filteredRows = useMemo(() => {
     let data = rows;
     if (areaFiltro !== "todas") {
-      data = data.filter((r) => String(r.empleado?.area?._id || r.empleado?.area) === String(areaFiltro));
+      data = data.filter(
+        (r) =>
+          String(r.empleado?.area?._id || r.empleado?.area) ===
+          String(areaFiltro)
+      );
     }
     if (sectorFiltro !== "todos") {
-      data = data.filter((r) => String(r.empleado?.sector?._id || r.empleado?.sector) === String(sectorFiltro));
+      data = data.filter(
+        (r) =>
+          String(r.empleado?.sector?._id || r.empleado?.sector) ===
+          String(sectorFiltro)
+      );
     }
     if (empSelectedId) {
-      data = data.filter((r) => String(r.empleado?._id) === String(empSelectedId));
+      data = data.filter(
+        (r) => String(r.empleado?._id) === String(empSelectedId)
+      );
     }
     return data;
   }, [rows, areaFiltro, sectorFiltro, empSelectedId]);
@@ -249,127 +349,245 @@ const [dueOnly, setDueOnly] = useState(false);   // <-- mueve estos acá
     return out;
   }, [filteredRows, tipoFiltro]);
 
-  // agrupación seleccionada
-  const grouped = useMemo(() => groupItems(flatItems, groupBy), [flatItems, groupBy]);
+  // agrupación seleccionada + orden
+  const grouped = useMemo(() => {
+    const base = groupItems(flatItems, groupBy);
+    if (sortDir === "desc") return [...base].reverse();
+    return base;
+  }, [flatItems, groupBy, sortDir]);
 
-  // agenda
+
+   // agenda (vista calendario) – una entrada POR EMPLEADO, igual que el Gantt
   const agendaList = useMemo(() => {
     if (view !== "agenda") return [];
     const entries = [];
-    grouped.forEach((g) => {
-      g.items.forEach((it, idx) => {
-        (it.hitos || []).forEach((h, j) => {
-          const key = `${(it.empleados?.[0]?._id)||"x"}-${it._id}-${h.periodo}-${idx}-${j}`;
+
+    flatItems.forEach((it, idx) => {
+      const empleados = Array.isArray(it.empleados) ? it.empleados : [];
+
+      (it.hitos || []).forEach((h, j) => {
+        empleados.forEach((emp, k) => {
+          if (!emp || !emp._id) return;
+
+          const key = `${emp._id}-${it._id}-${h.periodo}-${idx}-${j}-${k}`;
+
           entries.push({
             key,
-            empleados: it.empleados,
-            item: it.rawItem,
+            empleado: emp,          // 👈 empleado individual
+            item: it.rawItem || it, // por las dudas
             periodo: h.periodo,
-            fecha: h.fecha,
+            fecha: h.fecha || null, // si no hay fecha, el calendario usa periodo
           });
         });
       });
     });
-    return entries.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-  }, [grouped, view]);
 
-const openHitoPage = (item, empleados = [], hito) => {
-  const empId = Array.isArray(empleados) && empleados.length === 1 ? empleados[0]._id : null;
-  navigate(`/evaluacion/${item._id}/${hito.periodo}/${empId ?? ""}`, {
-    state: { from: "seguimiento", anio, itemSeleccionado: item, empleadosDelItem: empleados, hito },
-    replace: false,
-  });
-};
+    return entries.sort((a, b) => {
+      const fa = a.fecha ? new Date(a.fecha) : new Date(2100, 0, 1);
+      const fb = b.fecha ? new Date(b.fecha) : new Date(2100, 0, 1);
+      return fa - fb;
+    });
+  }, [flatItems, view]);
+
+
+
+  // ID del empleado seleccionado (usado para resaltar en el Gantt)
+  const selectedEmpleadoId = empSelectedId ? String(empSelectedId) : null;
+
+  const openHitoPage = (item, empleados = [], hito) => {
+    const empId =
+      Array.isArray(empleados) && empleados.length === 1
+        ? empleados[0]._id
+        : null;
+    navigate(
+      `/evaluacion/${item._id}/${hito.periodo}/${empId ?? ""}`,
+      {
+        state: {
+          from: "seguimiento",
+          anio,
+          itemSeleccionado: item,
+          empleadosDelItem: empleados,
+          hito,
+        },
+        replace: false,
+      }
+    );
+  };
+
+  const limpiarSeleccion = () => {
+    setEmpSelectedId(null);
+  };
 
   return (
     <div className="bg-slate-50 min-h-screen py-6">
       <div className="max-w-7xl mx-auto space-y-6 px-4">
-        {/* Filtros */}
+        {/* Filtros originales */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
           <FilterBar
             {...{
-              anio, setAnio,
-              areaFiltro, setAreaFiltro, areasUnicas,
-              sectorFiltro, setSectorFiltro, sectoresUnicos,
-              empQuery, setEmpQuery,
-              empSelectedId, setEmpSelectedId,
-              empHints, showEmpHints, setShowEmpHints,
+              anio,
+              setAnio,
+              areaFiltro,
+              setAreaFiltro,
+              areasUnicas,
+              sectorFiltro,
+              setSectorFiltro,
+              sectoresUnicos,
+              empQuery,
+              setEmpQuery,
+              empSelectedId,
+              setEmpSelectedId,
+              empHints,
+              showEmpHints,
+              setShowEmpHints,
             }}
           />
         </div>
 
-        {/* Controles */}
+        {/* Controles superiores */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
-            <Button variant={view === "gantt" ? "default" : "outline"} onClick={() => setView("gantt")}>📊 Gantt</Button>
-            <Button variant={view === "agenda" ? "default" : "outline"} onClick={() => setView("agenda")}>📅 Calendario</Button>
+            <Button
+              variant={view === "gantt" ? "default" : "outline"}
+              onClick={() => setView("gantt")}
+            >
+              📊 Gantt
+            </Button>
+            <Button
+              variant={view === "agenda" ? "default" : "outline"}
+              onClick={() => setView("agenda")}
+            >
+              📅 Calendario
+            </Button>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">Tipo</span>
-            <div className="inline-flex gap-1">
-              <Button variant={tipoFiltro === "todos" ? "default" : "outline"} size="sm" onClick={() => setTipoFiltro("todos")}>Todos</Button>
-              <Button variant={tipoFiltro === "objetivo" ? "default" : "outline"} size="sm" onClick={() => setTipoFiltro("objetivo")}>🎯 Objetivos</Button>
-              <Button variant={tipoFiltro === "aptitud" ? "default" : "outline"} size="sm" onClick={() => setTipoFiltro("aptitud")}>💡 Aptitudes</Button>
+            <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-lg">
+              <button
+                className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "todos"
+                  ? "bg-white text-slate-900 shadow-sm font-medium"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
+                onClick={() => setTipoFiltro("todos")}
+              >
+                Todos
+              </button>
+              <button
+                className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "objetivo"
+                  ? "bg-white text-slate-900 shadow-sm font-medium"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
+                onClick={() => setTipoFiltro("objetivo")}
+              >
+                🎯 Objetivos
+              </button>
+              <button
+                className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "aptitud"
+                  ? "bg-white text-slate-900 shadow-sm font-medium"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
+                onClick={() => setTipoFiltro("aptitud")}
+              >
+                💡 Aptitudes
+              </button>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Agrupar por</span>
-            <div className="inline-flex gap-1">
-              <Button size="sm" variant={groupBy === "item" ? "default" : "outline"} onClick={() => setGroupBy("item")}>Objetivo/Aptitud</Button>
-              <Button size="sm" variant={groupBy === "empleado" ? "default" : "outline"} onClick={() => setGroupBy("empleado")}>Empleado</Button>
-              <Button size="sm" variant={groupBy === "area" ? "default" : "outline"} onClick={() => setGroupBy("area")}>Área</Button>
-              <Button size="sm" variant={groupBy === "sector" ? "default" : "outline"} onClick={() => setGroupBy("sector")}>Sector</Button>
-            </div>
+            <span className="text-xs text-slate-500">Vencimientos</span>
+            <button
+              className={`text-xs rounded-md border px-3 py-1 ${dueOnly
+                ? "bg-emerald-600 text-white border-emerald-600"
+                : "hover:bg-slate-50"
+                }`}
+              onClick={() => setDueOnly((v) => !v)}
+            >
+              {dueOnly ? "Solo vencidos · 7d" : "Todos"}
+            </button>
           </div>
 
-<div className="flex items-center gap-2">
-     <span className="text-xs text-slate-500">Vencimientos</span>
-     <button
-       className={`text-xs rounded-md border px-3 py-1 ${dueOnly ? "bg-emerald-600 text-white border-emerald-600" : "hover:bg-slate-50"}`}
-       onClick={() => setDueOnly((v) => !v)}
-     >
-       {dueOnly ? "Solo vencidos  7d" : "Todos"}
-     </button>
-   </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Orden</span>
+            <button
+              className={`text-xs rounded-md border px-3 py-1 hover:bg-slate-50 ${sortDir === "asc" ? "font-semibold" : ""
+                }`}
+              onClick={() => setSortDir("asc")}
+            >
+              ↑ Asc
+            </button>
+            <button
+              className={`text-xs rounded-md border px-3 py-1 hover:bg-slate-50 ${sortDir === "desc" ? "font-semibold" : ""
+                }`}
+              onClick={() => setSortDir("desc")}
+            >
+              ↓ Desc
+            </button>
+          </div>
 
-   <div className="flex items-center gap-2">
-     <span className="text-xs text-slate-500">Orden</span>
-     <button
-       className={`text-xs rounded-md border px-3 py-1 hover:bg-slate-50 ${sortDir==="asc"?"font-semibold":""}`}
-       onClick={() => setSortDir("asc")}
-     >
-       ↑ Asc
-     </button>
-     <button
-       className={`text-xs rounded-md border px-3 py-1 hover:bg-slate-50 ${sortDir==="desc"?"font-semibold":""}`}
-       onClick={() => setSortDir("desc")}
-     >
-       ↓ Desc
-     </button>
-   </div>
           {view === "gantt" && (
             <div className="flex gap-2">
-              <Button variant={zoom === "mes" ? "default" : "outline"} size="sm" onClick={() => setZoom("mes")}>Meses</Button>
-              <Button variant={zoom === "trimestre" ? "default" : "outline"} size="sm" onClick={() => setZoom("trimestre")}>Trimestres</Button>
+              <Button
+                variant={zoom === "mes" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setZoom("mes")}
+              >
+                Meses
+              </Button>
+              <Button
+                variant={zoom === "trimestre" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setZoom("trimestre")}
+              >
+                Trimestres
+              </Button>
             </div>
           )}
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={limpiarSeleccion}
+              disabled={!selectedEmpleadoId}
+            >
+              🔄 Limpiar selección
+            </Button>
+          </div>
         </div>
 
-        {/* Contenido */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {view === "agenda" ? (
-            <CalendarView agendaList={agendaList} openHitoModal={openHitoPage} />
-          ) : (
-            <GanttView
-              grouped={grouped}        // <<--- NUEVO
-              anio={anio}
-              zoom={zoom}
-              openHitoModal={openHitoPage}
-              dueOnly={dueOnly}
-            />
-          )}
+        {/* Contenido: layout 1 columna (full-width Gantt) */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col min-h-[520px] overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100">
+            <div className="text-sm font-semibold text-slate-900">
+              {view === "gantt"
+                ? "Agenda de evaluaciones (Gantt)"
+                : "Agenda de evaluaciones (Calendario)"}
+            </div>
+            {loading && (
+              <div className="text-[11px] text-slate-500">Cargando…</div>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-auto">
+            {view === "agenda" ? (
+              <CalendarView
+                agendaList={agendaList}
+                openHitoModal={openHitoPage}
+              />
+            ) : (
+              <GanttView
+                grouped={flatItems}
+                anio={anio}
+                zoom={zoom}
+                openHitoModal={openHitoPage}
+                dueOnly={dueOnly}
+                sortDir={sortDir}
+                selectedEmpleadoId={selectedEmpleadoId}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
