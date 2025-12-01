@@ -62,17 +62,32 @@ const evaluacionSchema = new mongoose.Schema(
     // 📌 Resultados por meta (lo que ya venías usando)
     metasResultados: [
       {
-        nombre:    { type: String, required: true },
-        esperado:  { type: String },               // target definido en Plantilla
-        unidad:    { type: String },
-        operador:  { type: String, default: ">=" },
-        resultado: { type: Number, default: null }, // valor ingresado
-        cumple:    { type: Boolean, default: false }
+        nombre:          { type: String, required: true },
+        unidad:          { type: String }, // "Numérico", "Cumple/No Cumple", etc.
+        operador:        { type: String, default: ">=" },
+
+        // 👉 target de la meta (lo que viene de la plantilla)
+        esperado:        { type: Number, default: null },
+
+        // 👉 cómo se evalúa en el tiempo
+        modoAcumulacion: {
+          type: String,
+          enum: ["acumulativo", "periodo"],
+          default: "periodo",
+        },
+        acumulativa:     { type: Boolean, default: false },
+
+        // 👉 valor que carga el jefe / sistema (puede ser número o boolean)
+        resultado:       { type: mongoose.Schema.Types.Mixed, default: null },
+
+        // 👉 flag ya evaluado (lo calcula tu lógica de negocio)
+        cumple:          { type: Boolean, default: false },
       },
     ],
 
+
     // Autoría de creación
-    creadoPor: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    creadoPor: { type: mongoose.Schema.Types.ObjectId, ref: "Usuario" },
   },
   { timestamps: true }
 );

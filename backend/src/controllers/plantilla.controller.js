@@ -5,11 +5,14 @@ export async function createPlantilla(req, res) {
   try {
     const body = req.body;
 
-    const nueva = await Plantilla.create({
-      ...body,
-      fechaLimite: body.fechaLimite ? new Date(body.fechaLimite) : null,
-      metas: body.metas || [], // 👈 ahora guarda metas también
-    });
+const nueva = await Plantilla.create({
+  ...body,
+  fechaLimite: body.fechaLimite ? new Date(body.fechaLimite) : null,
+  metas: body.metas || [],
+  modoAcumulacion: body.modoAcumulacion || "periodo",
+  acumulativo: body.modoAcumulacion === "acumulativo"
+});
+
 
     res.status(201).json(nueva);
   } catch (err) {
@@ -29,6 +32,8 @@ export async function updatePlantilla(req, res) {
         ...body,
         fechaLimite: body.fechaLimite ? new Date(body.fechaLimite) : null,
         metas: body.metas || [], // 👈 acepta metas en update
+        modoAcumulacion: body.modoAcumulacion || "periodo",
+        acumulativo: body.modoAcumulacion === "acumulativo"
       },
       { new: true }
     );

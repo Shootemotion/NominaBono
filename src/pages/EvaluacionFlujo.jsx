@@ -90,8 +90,8 @@ function buildResumenEmpleado(data) {
     totalPeso > 0
       ? pesos.reduce((acc, p, i) => acc + p * (prog[i] || 0), 0) / totalPeso
       : prog.length
-        ? prog.reduce((a, b) => a + b, 0) / prog.length
-        : 0;
+      ? prog.reduce((a, b) => a + b, 0) / prog.length
+      : 0;
 
   const punt = aptitudes.map((a) => Number(a.puntuacion ?? a.score ?? 0));
   const scoreApt = punt.length
@@ -107,12 +107,17 @@ function buildResumenEmpleado(data) {
   };
 }
 
-// --- deduplicador robusto por _id o (nombre+unidad) ---
+// - --- clave consistente para metas: nombre + unidad ---
+function metaKey(m = {}) {
+  return `${m.nombre ?? ""}__${m.unidad ?? ""}`;
+}
+
+// --- deduplicador por nombre+unidad (ignora _id) ---
 function dedupeMetas(arr = []) {
   const seen = new Set();
   const out = [];
   for (const m of arr) {
-    const key = m?._id ? `id:${m._id}` : `nu:${m?.nombre}__${m?.unidad}`;
+    const key = metaKey(m);
     if (!seen.has(key)) {
       seen.add(key);
       out.push(m);
@@ -122,16 +127,30 @@ function dedupeMetas(arr = []) {
 }
 
 function deepCloneMetas(metas = []) {
-  const cloned = metas.map((m) => ({
-    _id: m._id,
-    nombre: m.nombre,
-    esperado: m.esperado,
-    unidad: m.unidad,
-    operador: m.operador || ">=",
-    resultado: m.resultado ?? null,
-    cumple: !!m.cumple && m.resultado != null ? !!m.cumple : false,
-    peso: m.peso ?? m.pesoBase ?? null,
-  }));
+  const cloned = metas.map((m) => {
+    const esperado =
+      m.esperado ??
+      m.target ?? // por si viene como target desde la plantilla
+      m.meta ?? // fallback extra
+      null;
+
+    return {
+      _id: m._id,
+      nombre: m.nombre,
+      esperado,
+      unidad: m.unidad,
+      operador: m.operador || ">=",
+      modoAcumulacion:
+        m.modoAcumulacion || (m.acumulativa ? "acumulativo" : "periodo"),
+      acumulativa:
+        m.acumulativa ?? m.modoAcumulacion === "acumulativo",
+      resultado: m.resultado ?? null,
+      cumple:
+        m.resultado != null && m.cumple != null ? !!m.cumple : false,
+      peso: m.peso ?? m.pesoBase ?? null,
+    };
+  });
+
   return dedupeMetas(cloned);
 }
 
@@ -277,7 +296,7 @@ export default function EvaluacionFlujo() {
   // ===== Roles y acceso =====
   const esReferente = Boolean(
     (Array.isArray(user?.referenteAreas) && user.referenteAreas.length > 0) ||
-    (Array.isArray(user?.referenteSectors) && user.referenteSectors.length > 0)
+      (Array.isArray(user?.referenteSectors) && user.referenteSectors.length > 0)
   );
   const esDirector = user?.rol === "directivo" || user?.isRRHH === true;
   const esSuperAdmin = user?.rol === "superadmin";
@@ -287,20 +306,23 @@ export default function EvaluacionFlujo() {
   // ===== Año de trabajo =====
   const [anio] = useState(
     state?.anio ??
-    Number(String(periodo || new Date().getFullYear()).slice(0, 4))
+      Number(String(periodo || new Date().getFullYear()).slice(0, 4))
   );
 
   // ===== Empleado en foco (sala de evaluación) =====
   const [selectedEmpleadoId, setSelectedEmpleadoId] = useState(
     empleadoId ||
-    state?.empleado?._id ||
-    state?.empleadosDelItem?.[0]?._id ||
-    user?.empleado?._id ||
-    null
+      state?.empleado?._id ||
+      state?.empleadosDelItem?.[0]?._id ||
+      user?.empleado?._id ||
+      null
   );
   const [empleadoInfo, setEmpleadoInfo] = useState(
     state?.empleado || state?.empleadosDelItem?.[0] || user?.empleado || null
   );
+
+  // ===== Evaluaciones del empleado (para acumulados) =====
+  const [evaluacionesEmpleado, setEvaluacionesEmpleado] = useState([]);
 
   // ===== Ítem / hito actual =====
   const [itemSeleccionado, setItemSeleccionado] = useState(
@@ -312,14 +334,14 @@ export default function EvaluacionFlujo() {
   const [localHito, setLocalHito] = useState(
     state?.hito
       ? {
-        periodo: state.hito.periodo,
-        fecha: state.hito.fecha,
-        metas: deepCloneMetas(state.hito.metas ?? []),
-        estado: state.hito.estado ?? "MANAGER_DRAFT",
-        actual: state.hito.actual ?? null,
-        comentario: state.hito.comentario ?? "",
-        escala: state.hito.escala ?? null,
-      }
+          periodo: state.hito.periodo,
+          fecha: state.hito.fecha,
+          metas: deepCloneMetas(state.hito.metas ?? []),
+          estado: state.hito.estado ?? "MANAGER_DRAFT",
+          actual: state.hito.actual ?? null,
+          comentario: state.hito.comentario ?? "",
+          escala: state.hito.escala ?? null,
+        }
       : null
   );
   const [comentarioManager, setComentarioManager] = useState(
@@ -390,14 +412,66 @@ export default function EvaluacionFlujo() {
     };
   }
 
+  async function ensurePlantillaWithMetas(plantillaBase) {
+    if (
+      plantillaBase &&
+      Array.isArray(plantillaBase.metas) &&
+      plantillaBase.metas.length > 0
+    ) {
+      return plantillaBase;
+    }
+
+    try {
+      const full = await api(`/templates/${plantillaBase._id}`);
+      return full || plantillaBase;
+    } catch (e) {
+      console.error("No se pudieron cargar las metas de la plantilla", e);
+      return plantillaBase;
+    }
+  }
+
+function buildMetasForEvaluacion(plantillaBase, ev) {
+  const baseMetas = Array.isArray(plantillaBase?.metas)
+    ? plantillaBase.metas
+    : [];
+  const resultados = Array.isArray(ev?.metasResultados)
+    ? ev.metasResultados
+    : [];
+
+  if (!baseMetas.length && !resultados.length) return [];
+
+  const map = new Map();
+
+  // 1) definición de plantilla
+  baseMetas.forEach((m) => {
+    const key = metaKey(m);
+    map.set(key, { ...m });
+  });
+
+  // 2) resultados guardados pisan solo resultado/cumple/etc,
+  //    pero NO pierden esperado / modoAcumulacion de la plantilla
+  resultados.forEach((r) => {
+    const key = metaKey(r);
+    const base = map.get(key) || {};
+    map.set(key, {
+      ...base,
+      ...r,
+      // nos aseguramos de no perder esperado ni acumulativa
+      esperado: r.esperado ?? base.esperado ?? null,
+      modoAcumulacion:
+        r.modoAcumulacion ?? base.modoAcumulacion ?? (base.acumulativa ? "acumulativo" : "periodo"),
+      acumulativa:
+        r.acumulativa ?? base.acumulativa ?? (base.modoAcumulacion === "acumulativo"),
+    });
+  });
+
+  return deepCloneMetas(Array.from(map.values()));
+}
+
   const hydrateFromEvaluacion = (plantillaBase, periodoSel, ev) => {
     if (!plantillaBase) return;
 
-    const metas = dedupeMetas(
-      Array.isArray(ev?.metasResultados) && ev.metasResultados.length
-        ? deepCloneMetas(ev.metasResultados)
-        : deepCloneMetas(plantillaBase?.metas ?? [])
-    );
+    const metas = buildMetasForEvaluacion(plantillaBase, ev);
 
     setLocalHito({
       periodo: periodoSel,
@@ -405,16 +479,21 @@ export default function EvaluacionFlujo() {
       estado: ev?.estado ?? "MANAGER_DRAFT",
       metas,
       actual:
-        ev?.actual ?? (metas.length ? calcularResultadoGlobal(metas) : null),
+        ev?.actual ??
+        (metas.length ? calcularResultadoGlobal(metas) : null),
       comentario: ev?.comentario ?? "",
       escala: ev?.escala ?? null,
     });
+
     setComentarioManager(ev?.comentarioManager ?? "");
   };
 
   const loadEvaluacion = async (empleado, plantilla, periodoSel) => {
     if (!empleado || !plantilla || !periodoSel) return;
     try {
+      // aseguro metas de la plantilla
+      const plantillaFull = await ensurePlantillaWithMetas(plantilla);
+
       const resp = await api(
         `/evaluaciones?empleado=${empleado}&plantillaId=${plantilla._id}&periodo=${periodoSel}`
       );
@@ -422,11 +501,18 @@ export default function EvaluacionFlujo() {
       const ev = arr[0] || null;
 
       if (ev) {
-        hydrateFromEvaluacion(plantilla, periodoSel, ev);
+        hydrateFromEvaluacion(plantillaFull, periodoSel, ev);
       } else {
-        setLocalHito(buildBlankLocalHito(plantilla, periodoSel));
+        setLocalHito(buildBlankLocalHito(plantillaFull, periodoSel));
         setComentarioManager("");
       }
+
+      // actualizo itemSeleccionado con metas completas
+      setItemSeleccionado((prev) =>
+        prev && String(prev._id) === String(plantilla._id)
+          ? { ...prev, metas: plantillaFull.metas }
+          : prev
+      );
 
       setPeriodoActivo((prev) => prev || periodoSel);
     } catch (e) {
@@ -440,7 +526,7 @@ export default function EvaluacionFlujo() {
     setComentarioManager("");
   }
 
-  /* ===================== efectos: empleado / dashboard ===================== */
+  /* ===================== efectos: empleado / dashboard / evaluaciones ===================== */
 
   // Si no hay empleadoInfo, lo traigo
   useEffect(() => {
@@ -454,6 +540,25 @@ export default function EvaluacionFlujo() {
       }
     })();
   }, [selectedEmpleadoId, empleadoInfo]);
+
+  // Evaluaciones del empleado (todas, para acumulados)
+  useEffect(() => {
+    (async () => {
+      if (!selectedEmpleadoId) {
+        setEvaluacionesEmpleado([]);
+        return;
+      }
+      try {
+        const resp = await api(
+          `/evaluaciones/empleado/${selectedEmpleadoId}?year=${anio}`
+        );
+        setEvaluacionesEmpleado(Array.isArray(resp) ? resp : []);
+      } catch (e) {
+        console.error("getEvaluacionesEmpleado error:", e);
+        setEvaluacionesEmpleado([]);
+      }
+    })();
+  }, [selectedEmpleadoId, anio]);
 
   // Dashboard del empleado (objetivos/aptitudes del año)
   useEffect(() => {
@@ -561,6 +666,46 @@ export default function EvaluacionFlujo() {
     }
   }, [isAptitud, localHito?.metas]);
 
+  /* ===================== Helper: acumulado desde BD ===================== */
+
+  const getAcumuladoAnteriorForMeta = (meta, periodoActual) => {
+    if (!meta || !periodoActual || !itemSeleccionado) return 0;
+    if (!evaluacionesEmpleado.length) return 0;
+
+    const fechaActual = parsePeriodoToDate(periodoActual);
+    if (!fechaActual) return 0;
+
+    const plantillaId = itemSeleccionado._id;
+    const claveNombre = meta.nombre;
+    const claveUnidad = meta.unidad ?? null;
+
+    return evaluacionesEmpleado
+      .filter(
+        (ev) =>
+          String(ev.plantillaId) === String(plantillaId)
+      )
+      .filter((ev) => {
+        const f = parsePeriodoToDate(ev.periodo);
+        return f && f < fechaActual; // solo periodos anteriores
+      })
+      .reduce((sum, ev) => {
+        const metasEv = Array.isArray(ev.metasResultados)
+          ? ev.metasResultados
+          : [];
+        const found = metasEv.find(
+          (m) =>
+            m.nombre === claveNombre &&
+            (m.unidad ?? null) === claveUnidad
+        );
+        return (
+          sum +
+          (typeof found?.resultado === "number"
+            ? found.resultado
+            : 0)
+        );
+      }, 0);
+  };
+
   /* ===================== Mapa de evaluaciones (lado izquierdo) ===================== */
 
   const mapaItems = useMemo(() => {
@@ -574,7 +719,14 @@ export default function EvaluacionFlujo() {
         // En lugar de buscar el hito del periodoActivo, buscamos el más urgente
         let hitoMasUrgente = null;
         let bucketMasUrgente = "pendiente";
-        const prioridades = { vencido: 1, por_vencer: 2, PENDING_EMPLOYEE: 3, PENDING_HR: 4, CLOSED: 5, pendiente: 6 };
+        const prioridades = {
+          vencido: 1,
+          por_vencer: 2,
+          PENDING_EMPLOYEE: 3,
+          PENDING_HR: 4,
+          CLOSED: 5,
+          pendiente: 6,
+        };
 
         // Recolectamos todos los buckets presentes en este item
         const bucketsFound = new Set();
@@ -618,10 +770,12 @@ export default function EvaluacionFlujo() {
           ),
           hitos,
           hitoActual: hitoMasUrgente,
-          fechaRef: hitoMasUrgente ? getFechaReferencia(it, hitoMasUrgente) : null,
+          fechaRef: hitoMasUrgente
+            ? getFechaReferencia(it, hitoMasUrgente)
+            : null,
           bucket: bucketMasUrgente,
           buckets: Array.from(bucketsFound),
-          hitosByBucket
+          hitosByBucket,
         });
       });
     };
@@ -654,10 +808,10 @@ export default function EvaluacionFlujo() {
       items = items.filter((i) => i.buckets.includes(bucketFiltro));
 
       // Ajustar la visualización para mostrar el hito correspondiente al filtro
-      items = items.map(i => ({
+      items = items.map((i) => ({
         ...i,
         bucket: bucketFiltro, // Forzamos el bucket visual para que coincida con el filtro
-        hitoActual: i.hitosByBucket[bucketFiltro] || i.hitoActual
+        hitoActual: i.hitosByBucket[bucketFiltro] || i.hitoActual,
       }));
     }
 
@@ -729,10 +883,10 @@ export default function EvaluacionFlujo() {
         ...(isApt
           ? { escala: Number(localHito?.escala ?? 0), metasResultados: [] }
           : {
-            metasResultados: Array.isArray(localHito.metas)
-              ? dedupeMetas(localHito.metas)
-              : [],
-          }),
+              metasResultados: Array.isArray(localHito.metas)
+                ? dedupeMetas(localHito.metas)
+                : [],
+            }),
         estado: "MANAGER_DRAFT",
       };
 
@@ -985,7 +1139,7 @@ export default function EvaluacionFlujo() {
               )}
             </div>
 
-                       {/* Filtros */}
+            {/* Filtros */}
             <div className="flex flex-col gap-3 mb-3">
               {/* Filtro por tipo */}
               <div>
@@ -1044,7 +1198,6 @@ export default function EvaluacionFlujo() {
               </div>
             </div>
 
-
             {/* Lista con scroll limitado */}
             <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
               {itemsMapaFiltrados.length === 0 && (
@@ -1093,10 +1246,11 @@ export default function EvaluacionFlujo() {
                   <button
                     key={it._id}
                     onClick={handleClick}
-                    className={`w-full text-left rounded-xl border px-3 py-2.5 text-xs transition shadow-sm ${selected
-                      ? "bg-indigo-50 border-indigo-200 shadow-md ring-1 ring-indigo-200"
-                      : "bg-slate-50 hover:bg-white"
-                      }`}
+                    className={`w-full text-left rounded-xl border px-3 py-2.5 text-xs transition shadow-sm ${
+                      selected
+                        ? "bg-indigo-50 border-indigo-200 shadow-md ring-1 ring-indigo-200"
+                        : "bg-slate-50 hover:bg-white"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 w-full">
@@ -1153,15 +1307,15 @@ export default function EvaluacionFlujo() {
                   <div className="flex items-center gap-2">
                     {(itemSeleccionado?.pesoBase != null ||
                       itemSeleccionado?.peso != null) && (
-                        <div className="rounded-lg bg-slate-50 border px-3 py-2">
-                          <div className="text-[10px] text-slate-500">Peso</div>
-                          <div className="text-sm font-semibold">
-                            {itemSeleccionado?.pesoBase ??
-                              itemSeleccionado?.peso}
-                            %
-                          </div>
+                      <div className="rounded-lg bg-slate-50 border px-3 py-2">
+                        <div className="text-[10px] text-slate-500">Peso</div>
+                        <div className="text-sm font-semibold">
+                          {itemSeleccionado?.pesoBase ??
+                            itemSeleccionado?.peso}
+                          %
                         </div>
-                      )}
+                      </div>
+                    )}
                     <div className="rounded-lg bg-slate-50 border px-3 py-2">
                       <div className="text-[10px] text-slate-500">Estado</div>
                       <div className="text-xs font-medium">{estadoLabel}</div>
@@ -1300,97 +1454,137 @@ export default function EvaluacionFlujo() {
               </div>
             ) : (
               <div className="grid gap-3">
-                {dedupeMetas(localHito?.metas || []).map((m, idx) => (
-                  <div
-                    key={`${m._id ?? m.nombre}-${idx}`}
-                    className="border rounded-md p-3 bg-slate-50 shadow-sm"
-                  >
-                    <p className="text-sm font-semibold">{m.nombre}</p>
-                    <p className="text-xs text-gray-500">
-                      Esperado: {m.operador || ">="} {m.esperado} {m.unidad}
-                    </p>
+                {dedupeMetas(localHito?.metas || []).map((m, idx) => {
+                  const isAcum =
+                    m.acumulativa || m.modoAcumulacion === "acumulativo";
+                  const prevAcum = isAcum
+                    ? getAcumuladoAnteriorForMeta(m, localHito.periodo)
+                    : 0;
+                  const currentVal =
+                    m.resultado != null ? Number(m.resultado) : null;
+                  const total =
+                    isAcum && currentVal != null
+                      ? prevAcum + currentVal
+                      : currentVal;
 
-                    {m.unidad === "Cumple/No Cumple" ? (
-                      <label className="flex items-center gap-2 mt-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={!!m.resultado}
-                          disabled={!editable}
-                          onChange={(e) => {
-                            const val = e.target.checked;
-                            setLocalHito((prev) => {
-                              const metas = dedupeMetas([
-                                ...(prev?.metas || []),
-                              ]);
-                              metas[idx] = {
-                                ...metas[idx],
-                                resultado: val,
-                                cumple: val,
-                              };
-                              return { ...(prev || {}), metas };
-                            });
-                          }}
-                        />
-                        Cumplido
-                      </label>
-                    ) : (
-                      <>
-                        <input
-                          type="number"
-                          className="w-full rounded-md border px-2 py-1 text-sm mt-2 focus:ring-2 focus:ring-primary/40 outline-none bg-white"
-                          placeholder="Resultado alcanzado"
-                          value={m.resultado ?? ""}
-                          disabled={!editable}
-                          onChange={(e) => {
-                            const valor =
-                              e.target.value === ""
-                                ? null
-                                : Number(e.target.value);
-                            setLocalHito((prev) => {
-                              const metas = dedupeMetas([
-                                ...(prev?.metas || []),
-                              ]);
-                              metas[idx] = {
-                                ...metas[idx],
-                                resultado: valor,
-                                cumple: evaluarCumple(
-                                  valor,
-                                  metas[idx].esperado,
-                                  metas[idx].operador,
-                                  metas[idx].unidad
-                                ),
-                              };
-                              return { ...(prev || {}), metas };
-                            });
-                          }}
-                        />
-                        {m.resultado !== null &&
-                          m.resultado !== undefined && (
-                            <p
-                              className={`text-xs mt-1 font-medium ${evaluarCumple(
-                                m.resultado,
-                                m.esperado,
-                                m.operador,
-                                m.unidad
-                              )
-                                ? "text-green-600"
-                                : "text-red-600"
-                                }`}
-                            >
-                              {evaluarCumple(
-                                m.resultado,
-                                m.esperado,
-                                m.operador,
-                                m.unidad
-                              )
-                                ? "✔ Cumplido"
-                                : "✘ No cumplido"}
-                            </p>
+                  return (
+                    <div
+                      key={`${m._id ?? m.nombre}-${idx}`}
+                      className="border rounded-md p-3 bg-slate-50 shadow-sm"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-semibold">{m.nombre}</p>
+                          <p className="text-xs text-gray-500">
+                            Esperado: {m.operador || ">="} {m.esperado}{" "}
+                            {m.unidad}
+                            {isAcum && (
+                              <span className="ml-2 text-indigo-600 font-medium">
+                                (Acumulativo)
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {m.unidad === "Cumple/No Cumple" ? (
+                        <label className="flex items-center gap-2 mt-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={!!m.resultado}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const val = e.target.checked;
+                              setLocalHito((prev) => {
+                                const metas = dedupeMetas([
+                                  ...(prev?.metas || []),
+                                ]);
+                                metas[idx] = {
+                                  ...metas[idx],
+                                  resultado: val,
+                                  cumple: val,
+                                };
+                                return { ...(prev || {}), metas };
+                              });
+                            }}
+                          />
+                          Cumplido
+                        </label>
+                      ) : (
+                        <>
+                          <input
+                            type="number"
+                            className="w-full rounded-md border px-2 py-1 text-sm mt-2 focus:ring-2 focus:ring-primary/40 outline-none bg-white"
+                            placeholder="Resultado alcanzado"
+                            value={m.resultado ?? ""}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const valor =
+                                e.target.value === ""
+                                  ? null
+                                  : Number(e.target.value);
+                              setLocalHito((prev) => {
+                                const metas = dedupeMetas([
+                                  ...(prev?.metas || []),
+                                ]);
+                                const valTotal =
+                                  isAcum && valor != null
+                                    ? prevAcum + valor
+                                    : valor;
+
+                                metas[idx] = {
+                                  ...metas[idx],
+                                  resultado: valor,
+                                  cumple: evaluarCumple(
+                                    valTotal,
+                                    metas[idx].esperado,
+                                    metas[idx].operador,
+                                    metas[idx].unidad
+                                  ),
+                                };
+                                return { ...(prev || {}), metas };
+                              });
+                            }}
+                          />
+
+                          {isAcum && (
+                            <div className="text-xs text-slate-500 mt-1 flex flex-col">
+                              <span>Anterior: {prevAcum}</span>
+                              <span className="font-semibold text-slate-700">
+                                Total: {total != null ? total : "—"}
+                              </span>
+                            </div>
                           )}
-                      </>
-                    )}
-                  </div>
-                ))}
+
+                          {m.resultado !== null &&
+                            m.resultado !== undefined && (
+                              <p
+                                className={`text-xs mt-1 font-medium ${
+                                  evaluarCumple(
+                                    total,
+                                    m.esperado,
+                                    m.operador,
+                                    m.unidad
+                                  )
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {evaluarCumple(
+                                  total,
+                                  m.esperado,
+                                  m.operador,
+                                  m.unidad
+                                )
+                                  ? "✔ Cumplido"
+                                  : "✘ No cumple"}
+                              </p>
+                            )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1457,12 +1651,12 @@ export default function EvaluacionFlujo() {
                 },
                 ...(localHito?.comentario
                   ? [
-                    {
-                      estado: "feedback",
-                      fecha: new Date(),
-                      comentario: localHito.comentario,
-                    },
-                  ]
+                      {
+                        estado: "feedback",
+                        fecha: new Date(),
+                        comentario: localHito.comentario,
+                      },
+                    ]
                   : []),
               ]}
               resultadoGlobal={localHito?.actual}

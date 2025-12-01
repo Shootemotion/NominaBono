@@ -91,6 +91,8 @@ export default function GestionPlantillasPage() {
   const [scopeType, setScopeType] = useState("");
   const [scopeId, setScopeId] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("todos"); // todos | activas
+  // dentro del componente
+const [refreshKey, setRefreshKey] = useState(0);
 
   // Modales
   const [formOpen, setFormOpen] = useState(false);
@@ -127,6 +129,7 @@ export default function GestionPlantillasPage() {
       .slice(0, MAX_LIST);
   };
 
+
   const empleadosFiltradosHeader = useMemo(
     () => filterEmpleados(empQueryHeader),
     [empQueryHeader, empleados]
@@ -137,6 +140,7 @@ export default function GestionPlantillasPage() {
     [empQuerySidebar, empleados]
   );
 
+  
      // cerrar dropdowns al click afuera
   useEffect(() => {
     function handleClickOutside(ev) {
@@ -167,6 +171,7 @@ export default function GestionPlantillasPage() {
   // Permisos
   const isDirectivo =
     user?.isDirectivo || user?.rol === "director" || user?.rol === "directivo";
+
 
   const permisos = {
     canCreateObjetivo: isDirectivo || useCan("objetivos:crear").ok,
@@ -270,7 +275,7 @@ export default function GestionPlantillasPage() {
       scopeId: scopeId || undefined,
       tipoFiltro,
     }),
-    [year, scopeType, scopeId, tipoFiltro]
+    [year, scopeType, scopeId, tipoFiltro,refreshKey]
   );
   const hook = usePlantillas(hookParams);
   const { loading, reload, addLocal, updateLocal, removeLocal } = hook;
@@ -350,7 +355,7 @@ export default function GestionPlantillasPage() {
         setPlantillasSector([]);
       }
     })();
-  }, [year, scopeType, scopeId, empleadoId, sectores]);
+  }, [year, scopeType, scopeId, empleadoId, sectores,refreshKey]);
 
 
   // 🔁 Empleado: empleado + sector + área (sin aplicar overrides todavía)
@@ -416,7 +421,7 @@ export default function GestionPlantillasPage() {
         setPlantillasByEmpRaw([]);
       }
     })();
-  }, [empleadoId, selectedEmpleado, year]);
+  }, [empleadoId, selectedEmpleado, year,refreshKey]);
 
   // Aplica overrides del empleado a las plantillas heredadas (oculta excluidas y marca overrides)
   const plantillasByEmp = useMemo(() => {
@@ -457,7 +462,7 @@ export default function GestionPlantillasPage() {
 
     // 💥 acá se ocultan los excluidos
     return withOv.filter((tpl) => !tpl.__excluido);
-  }, [plantillasByEmpRaw, empOverrides, empleadoId, year]);
+  }, [plantillasByEmpRaw, empOverrides, empleadoId, year,refreshKey]);
 
   // 🔁 Fallback: TODAS (unión area/sector/empleado) cuando no hay alcance ni empleado
   useEffect(() => {
@@ -495,7 +500,7 @@ export default function GestionPlantillasPage() {
         setAllPlantillas([]);
       }
     })();
-  }, [year, tipoFiltro, empleadoId, scopeType, scopeId]);
+  }, [year, tipoFiltro, empleadoId, scopeType, scopeId,refreshKey]);
 
 
 
@@ -520,7 +525,7 @@ export default function GestionPlantillasPage() {
         setEmpOverrides([]);
       }
     })();
-  }, [empleadoId, year]);
+  }, [empleadoId, year,refreshKey ]);
 
   const plantillas = useMemo(() => {
     if (plantillasByEmp !== null) return plantillasByEmp;
@@ -574,30 +579,34 @@ export default function GestionPlantillasPage() {
     setCloneOpen(true);
   };
 
-  const handleAfterSave = (tpl) => {
-    if (editing?._id) {
-      updateLocal(tpl);
-      toast.success("Plantilla actualizada");
-    } else {
-      addLocal(tpl);
-      toast.success("Plantilla creada");
-    }
-    setEditing(null);
-    setModalFormType(null);
-    setFormOpen(false);
-  };
+const handleAfterSave = (tpl) => {
+  if (editing?._id) {
+    updateLocal(tpl);
+  } else {
+    addLocal(tpl);
+  }
 
-  const handleDelete = async (tpl) => {
-    if (!confirm(`¿Eliminar plantilla "${tpl.nombre}"?`)) return;
-    try {
-      await api(`/templates/${tpl._id}`, { method: "DELETE" });
-      removeLocal(tpl._id);
-      toast.success("Plantilla eliminada");
-    } catch {
-      toast.error("No se pudo eliminar");
-    }
-  };
+  setEditing(null);
+  setModalFormType(null);
+  setFormOpen(false);
 
+  setRefreshKey((k) => k + 1);  // 👈 dispara refetch en todos
+  reload();                     // 👈 refresca el hook usePlantillas
+};
+
+const handleDelete = async (tpl) => {
+  if (!confirm(`¿Eliminar plantilla "${tpl.nombre}"?`)) return;
+  try {
+    await api(`/templates/${tpl._id}`, { method: "DELETE" });
+    removeLocal(tpl._id);
+
+    setRefreshKey((k) => k + 1);
+    reload();
+    // 👆 el toast de éxito lo dejás en PlantillasList si querés uno solo
+  } catch {
+    toast.error("No se pudo eliminar");
+  }
+};
   const clearAlcance = () => {
     setScopeType("");
     setScopeId("");
@@ -1086,11 +1095,12 @@ export default function GestionPlantillasPage() {
                 nombre: cloneTpl.nombre,
                 proceso: cloneTpl.proceso,
               };
-              await api("/templates", { method: "POST", body });
-              await reload();
-              toast.success("Plantilla clonada");
-              setCloneOpen(false);
-              setCloneTpl(null);
+           await api("/templates", { method: "POST", body });
+await reload();
+setRefreshKey((k) => k + 1);
+
+setCloneOpen(false);
+setCloneTpl(null);
             } catch (e) {
               console.error(e);
               toast.error("No se pudo clonar");

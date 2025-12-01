@@ -27,6 +27,7 @@ export default function FormularioObjetivos({
   const [scopeType, setScopeType] = useState(initialScopeType || "area"); // "area" | "sector" | "empleado"
   const [scopeId, setScopeId] = useState(initialScopeId || "");
   const [frecuencia, setFrecuencia] = useState("anual");
+const [modoAcumulacion, setModoAcumulacion] = useState("periodo"); // "periodo" | "acumulativo"
 
   const [peso, setPeso] = useState(0);
 const MAX_LIST = 2000; // ajustá a gusto
@@ -84,20 +85,26 @@ const selectedEmpleado = useMemo(
       ? initialData.sectorId || initialData.scopeId || ""
       : initialData.empleadoId || initialData.scopeId || ""
   );
+setFrecuencia(initialData.frecuencia || "anual");
+setModoAcumulacion(
+  initialData.modoAcumulacion ||
+    (initialData.acumulativo ? "acumulativo" : "periodo")
+);
+setPeso(initialData.pesoBase ?? initialData.peso ?? 0);
 
-  setFrecuencia(initialData.frecuencia || "anual");
-  setPeso(initialData.pesoBase ?? initialData.peso ?? 0);
+ setMetas(
+  Array.isArray(initialData.metas)
+    ? initialData.metas.map((m) => ({
+        nombre: m.nombre || "",
+        target: m.target ?? "",
+        unidad: m.unidad || "Porcentual",
+        operador: m.operador || ">=",
+        modoAcumulacion: m.modoAcumulacion || "periodo",
+        acumulativa: m.acumulativa ?? (m.modoAcumulacion === "acumulativo"),
+      }))
+    : []
+);
 
-  setMetas(
-    Array.isArray(initialData.metas)
-      ? initialData.metas.map((m) => ({
-          nombre: m.nombre || "",
-          target: m.target ?? "",
-          unidad: m.unidad || "Porcentual",
-          operador: m.operador || ">=",
-        }))
-      : []
-  );
 
   // Override de cierre fiscal
   setUsarFechaCierreCustom(!!initialData.fechaCierreCustom);
@@ -119,8 +126,19 @@ const selectedEmpleado = useMemo(
   }, [empOpen]);
 
   // Metas helpers
-  const handleAddMeta = () =>
-    setMetas((m) => [...m, { nombre: "", target: "", unidad: "Porcentual", operador: ">=" }]);
+const handleAddMeta = () =>
+  setMetas((m) => [
+    ...m,
+    {
+      nombre: "",
+      target: "",
+      unidad: "Porcentual",
+      operador: ">=",
+      modoAcumulacion: "periodo",
+      acumulativa: false,
+    },
+  ]);
+
 
   const handleMetaChange = (idx, field, value) =>
     setMetas((prev) =>
@@ -169,21 +187,24 @@ const selectedEmpleado = useMemo(
 
     // limpiar metas vacías y castear target si es numérico
     const metasClean = (metas || [])
-      .map((m) => ({
-        nombre: (m.nombre || "").trim(),
-        target:
-          m.target === "" || m.target == null
-            ? null
-            : isNaN(+m.target)
-            ? m.target
-            : Number(m.target),
-        unidad: (m.unidad || "").trim(),
-        operador: m.operador || ">=",
-      }))
-      .filter((m) => m.nombre || m.target !== null || m.unidad);
+  .map((m) => ({
+    nombre: (m.nombre || "").trim(),
+    target:
+      m.target === "" || m.target == null
+        ? null
+        : isNaN(+m.target)
+        ? m.target
+        : Number(m.target),
+    unidad: (m.unidad || "").trim(),
+    operador: m.operador || ">=",
+    modoAcumulacion: m.modoAcumulacion || "periodo",
+    acumulativa: m.acumulativa === true || m.modoAcumulacion === "acumulativo",
+  }))
+  .filter((m) => m.nombre || m.target !== null || m.unidad);
+
 
     // el backend usa los mismos literales para scopeType
-    const body = {
+const body = {
   tipo: "objetivo",
   year: Number(year),
   scopeType,
@@ -192,9 +213,12 @@ const selectedEmpleado = useMemo(
   descripcion,
   proceso,
   frecuencia,
+  modoAcumulacion,                               // 👈 nuevo
+  acumulativo: modoAcumulacion === "acumulativo", // 👈 bandera cómoda
   pesoBase: Number(peso || 0),
   activo: true,
 };
+
 
 if (usarFechaCierreCustom && fechaCierre) {
   body.fechaCierre = new Date(fechaCierre);
@@ -318,12 +342,14 @@ const [fechaCierre, setFechaCierre] = useState("");
               >
                 <option value="mensual">Mensual</option>
                 <option value="trimestral">Trimestral</option>
-                <option value="semestral">Semestral</option>
-                <option value="anual">Anual</option>
               </select>
               <FieldError name="frecuencia" />
             </div>
           </div>
+          
+
+
+
 <div>
   <label className="text-xs flex items-center gap-2">
     <input
@@ -543,9 +569,11 @@ const [fechaCierre, setFechaCierre] = useState("");
   <h3 className="text-base font-semibold">📌 Metas</h3>
  {metas.map((m, i) => (
   <div
-    key={i}
-    className="grid grid-cols-5 gap-3 items-end bg-muted/20 rounded-md p-2"
-  >
+  key={i}
+  className="grid grid-cols-1 gap-3 items-end bg-muted/20 rounded-md p-2
+             md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+>
+
     {/* Nombre */}
     <div>
       <label className="text-xs">Nombre</label>
@@ -569,6 +597,24 @@ const [fechaCierre, setFechaCierre] = useState("");
         <option value="Numerico">Numérico</option>
       </select>
     </div>
+
+ {/* 🔹 Modo de acumulación */}
+  <div>
+    <label className="text-xs">Modo</label>
+    <select
+      className="w-full rounded-md border px-2 py-1 text-sm"
+      value={m.modoAcumulacion || "periodo"}
+      onChange={(e) => {
+        const v = e.target.value;
+        handleMetaChange(i, "modoAcumulacion", v);
+        handleMetaChange(i, "acumulativa", v === "acumulativo");
+      }}
+    >
+      <option value="periodo">Por período</option>
+      <option value="acumulativo">Acumulativo</option>
+    </select>
+  </div>
+
 
     {/* Target + Operador (solo si no es Cumple/No Cumple) */}
     {m.unidad !== "Cumple/No Cumple" && (
@@ -613,17 +659,17 @@ const [fechaCierre, setFechaCierre] = useState("");
     )}
 
     {/* Botón eliminar */}
-    <div className="flex justify-end items-center">
-      <Button
-        type="button"
-        variant="destructive"
-        size="sm"
-        className="h-8 px-2 bg-rose-100 text-rose-700 hover:bg-rose-200 border-0"
-        onClick={() => handleRemoveMeta(i)}
-      >
-        ✕
-      </Button>
-    </div>
+<div className="flex justify-end items-center col-span-full lg:col-span-1">
+  <Button
+    type="button"
+    variant="destructive"
+    size="sm"
+    className="h-8 px-2 bg-rose-100 text-rose-700 hover:bg-rose-200 border-0"
+    onClick={() => handleRemoveMeta(i)}
+  >
+    ✕
+  </Button>
+</div>
   </div>
 ))}
 <Button type="button" variant="secondary" onClick={handleAddMeta}>

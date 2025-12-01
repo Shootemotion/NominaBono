@@ -89,21 +89,33 @@ const plantillaSchema = new mongoose.Schema(
 
     /* --- Metas (solo objetivos) --- */
     metas: [
-      {
-        nombre: { type: String, required: true },
-        target: { type: String },
-        unidad: {
-          type: String,
-          enum: ["Cumple/No Cumple", "Porcentual", "Numerico"],
-          default: "Porcentual",
-        },
-        operador: {
-          type: String,
-          enum: [">=", ">", "<=", "<", "==", "!="],
-          default: ">=",
-        },
-      },
-    ],
+  {
+    nombre: { type: String, required: true },
+    target: { type: String },
+    unidad: {
+      type: String,
+      enum: ["Cumple/No Cumple", "Porcentual", "Numerico"],
+      default: "Porcentual",
+    },
+    operador: {
+      type: String,
+      enum: [">=", ">", "<=", "<", "==", "!="],
+      default: ">=",
+    },
+
+    // 🔹 NUEVO: modo por meta
+    modoAcumulacion: {
+      type: String,
+      enum: ["periodo", "acumulativo"],
+      default: "periodo",
+    },
+
+    acumulativa: {
+      type: Boolean,
+      default: false,
+    },
+  },
+],
 
     /* --- SISTEMA DE FECHAS AUTOMÁTICAS --- */
     fechaInicioFiscal: { type: Date }, // se completa solo
@@ -116,6 +128,8 @@ const plantillaSchema = new mongoose.Schema(
       enum: ["mensual", "trimestral", "semestral", "anual"],
       required: true,
     },
+
+    
 
     pesoBase: { type: Number, min: 0, max: 100, required: true },
 
