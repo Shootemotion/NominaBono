@@ -51,7 +51,7 @@ async function computeForEmployees(empleadoIds, anio) {
         const scopeIdStr = String(p.scopeId);
         if (p.scopeType === "area" && areaIdStr && scopeIdStr === areaIdStr) return true;
         if (p.scopeType === "sector" && sectorIdStr && scopeIdStr === sectorIdStr) return true;
-          if (p.scopeType === "empleado" && scopeIdStr === empIdStr)                   return true;
+        if (p.scopeType === "empleado" && scopeIdStr === empIdStr) return true;
         return false;
       });
 
@@ -69,10 +69,10 @@ async function computeForEmployees(empleadoIds, anio) {
         const ov = empOverrides ? empOverrides.get(tplIdStr) : null;
         if (ov && ov.excluido) continue;
 
-          const basePeso = Number(p.pesoBase || 0);
-  const peso = (ov && typeof ov.peso === "number")
-    ? Number(ov.peso)
-    : basePeso; // (si más adelante metés shares por participaciones, acá se multiplicaría)
+        const basePeso = Number(p.pesoBase || 0);
+        const peso = (ov && typeof ov.peso === "number")
+          ? Number(ov.peso)
+          : basePeso; // (si más adelante metés shares por participaciones, acá se multiplicaría)
 
 
         // 🔹 Generar hitos con resultados ya guardados
@@ -85,25 +85,26 @@ async function computeForEmployees(empleadoIds, anio) {
                 ev.periodo === h.periodo
             );
 
-           const metasCombinadas = (p.metas || []).map((m) => {
-  const evaluada = evHito?.metasResultados?.find(
-    (em) => String(em._id) === String(m._id) || em.nombre === m.nombre
-  );
-  return {
-    _id: m._id,
-    nombre: m.nombre || m.descripcion || "Meta",
-    esperado: m.esperado ?? m.target ?? null,
-    unidad: m.unidad ?? "",
-    resultado: evaluada?.resultado ?? null,
-    cumple: evaluada?.cumple ?? false,
-  };
-});
+            const metasCombinadas = (p.metas || []).map((m) => {
+              const evaluada = evHito?.metasResultados?.find(
+                (em) => String(em._id) === String(m._id) || em.nombre === m.nombre
+              );
+              return {
+                _id: m._id,
+                nombre: m.nombre || m.descripcion || "Meta",
+                esperado: m.esperado ?? m.target ?? null,
+                unidad: m.unidad ?? "",
+                resultado: evaluada?.resultado ?? null,
+                cumple: evaluada?.cumple ?? false,
+              };
+            });
 
 
             return {
               ...h,
               actual: evHito?.actual ?? null,
               comentario: evHito?.comentario ?? "",
+              estado: evHito?.estado ?? null,
               metas: metasCombinadas, // ✅ metas evaluadas por hito
             };
           })
@@ -128,7 +129,7 @@ async function computeForEmployees(empleadoIds, anio) {
             comentario: "",
             frecuencia: p.frecuencia,
             fechaLimite: p.fechaLimite,
-            metas: hitos.flatMap((h) => h.metas || []), // ✅ ahora sí metas evaluadas
+            metas: p.metas || [],
             hitos,
           });
 
@@ -150,7 +151,7 @@ async function computeForEmployees(empleadoIds, anio) {
             comentario: "",
             frecuencia: p.frecuencia,
             fechaLimite: p.fechaLimite,
-            metas: hitos.flatMap((h) => h.metas || []), // ✅ metas evaluadas
+            metas: p.metas || [],
             hitos,
           });
 
@@ -227,6 +228,7 @@ export async function dashByArea(req, res) {
     return res.status(500).json({ message: e.message || "Error interno" });
   }
 }
+
 export const dashBySector = async (req, res) => {
   try {
     const { sectorId } = req.params;
@@ -242,6 +244,7 @@ export const dashBySector = async (req, res) => {
 
     if (!sectorId || !isValidObjectId(sectorId)) {
       return res.status(400).json({ message: "sectorId inválido" });
+
     }
 
     const empleadosDocs = await Empleado.find(
@@ -259,7 +262,6 @@ export const dashBySector = async (req, res) => {
   }
 };
 
-
 export const dashByEmpleado = async (req, res, next) => {
   try {
     const { empleadoId } = req.params;
@@ -274,13 +276,13 @@ export const dashByEmpleado = async (req, res, next) => {
       return res.status(404).json({ message: "Empleado no encontrado" });
     }
 
-    const areaId   = empleado.area   ? (empleado.area._id   ?? empleado.area)   : null;
+    const areaId = empleado.area ? (empleado.area._id ?? empleado.area) : null;
     const sectorId = empleado.sector ? (empleado.sector._id ?? empleado.sector) : null;
 
     // 🔹 Traer plantillas del año para: área, sector y empleado
     const or = [];
-    if (areaId)   or.push({ scopeType: "area",     scopeId: areaId   });
-    if (sectorId) or.push({ scopeType: "sector",   scopeId: sectorId });
+    if (areaId) or.push({ scopeType: "area", scopeId: areaId });
+    if (sectorId) or.push({ scopeType: "sector", scopeId: sectorId });
     or.push({ scopeType: "empleado", scopeId: empleado._id });
 
     const plantillas = await Plantilla.find({
@@ -343,6 +345,7 @@ export const dashByEmpleado = async (req, res, next) => {
             ...h,
             actual: evHito?.actual ?? null,
             comentario: evHito?.comentario ?? "",
+            estado: evHito?.estado ?? null,
             metas: metasCombinadas,
           };
         })
@@ -351,7 +354,7 @@ export const dashByEmpleado = async (req, res, next) => {
       if (p.tipo === "objetivo") {
         const progresos = hitos.map((h) => h.actual ?? 0);
         const progreso = progresos.length
-          ? Math.round(progresos.reduce((a,b) => a+b, 0) / progresos.length)
+          ? Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length)
           : 0;
 
         objetivosArr.push({
@@ -366,7 +369,7 @@ export const dashByEmpleado = async (req, res, next) => {
           comentario: "",
           frecuencia: p.frecuencia,
           fechaLimite: p.fechaLimite,
-          metas: hitos.flatMap((h) => h.metas || []),
+          metas: p.metas || [],
           hitos,
         });
 
@@ -375,7 +378,7 @@ export const dashByEmpleado = async (req, res, next) => {
       } else if (p.tipo === "aptitud") {
         const puntuaciones = hitos.map((h) => h.actual ?? 0);
         const puntuacion = puntuaciones.length
-          ? Math.round(puntuaciones.reduce((a,b) => a+b, 0) / puntuaciones.length)
+          ? Math.round(puntuaciones.reduce((a, b) => a + b, 0) / puntuaciones.length)
           : 0;
 
         aptitudesArr.push({
@@ -388,7 +391,7 @@ export const dashByEmpleado = async (req, res, next) => {
           comentario: "",
           frecuencia: p.frecuencia,
           fechaLimite: p.fechaLimite,
-          metas: hitos.flatMap((h) => h.metas || []),
+          metas: p.metas || [],
           hitos,
         });
 
@@ -397,10 +400,10 @@ export const dashByEmpleado = async (req, res, next) => {
       }
     }
 
-    const scoreObj   = sumPesoObj > 0 ? weightedProgressSum / sumPesoObj : 0;
-    const scoreApt   = sumPesoApt > 0 ? weightedAptScoreSum / sumPesoApt : 0;
+    const scoreObj = sumPesoObj > 0 ? weightedProgressSum / sumPesoObj : 0;
+    const scoreApt = sumPesoApt > 0 ? weightedAptScoreSum / sumPesoApt : 0;
     const scoreFinal = Math.round((0.8 * scoreObj + 0.2 * scoreApt) * 10) / 10;
-    const bono       = (objetivosArr.length || aptitudesArr.length) ? `${scoreFinal}%` : null;
+    const bono = (objetivosArr.length || aptitudesArr.length) ? `${scoreFinal}%` : null;
 
     return res.json({
       empleado: {
@@ -408,8 +411,8 @@ export const dashByEmpleado = async (req, res, next) => {
         nombre: empleado.nombre,
         apellido: empleado.apellido,
         puesto: empleado.puesto,
-        area:   empleado.area   ? { _id: empleado.area._id,   nombre: empleado.area.nombre }     : null,
-        sector: empleado.sector ? { _id: empleado.sector._id, nombre: empleado.sector.nombre }   : null,
+        area: empleado.area ? { _id: empleado.area._id, nombre: empleado.area.nombre } : null,
+        sector: empleado.sector ? { _id: empleado.sector._id, nombre: empleado.sector.nombre } : null,
       },
       objetivos: { count: objetivosArr.length, sumPeso: sumPesoObj, items: objetivosArr },
       aptitudes: { count: aptitudesArr.length, sumPeso: sumPesoApt, items: aptitudesArr },

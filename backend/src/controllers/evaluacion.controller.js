@@ -94,12 +94,16 @@ comentarioManager: req.body.comentarioManager ?? null,
   }
 };
 
-// 📊 listar evaluaciones del empleado por año (ruta existente)
-// controllers/evaluacion.controller.js
+// 📊 listar evaluaciones del empleado por año
 export const getEvaluacionesEmpleado = async (req, res, next) => {
   try {
     const { empleadoId } = req.params;
-    const evaluaciones = await Evaluacion.find({ empleado: empleadoId }).lean();
+    const { year } = req.query;
+
+    const q = { empleado: empleadoId };
+    if (year) q.year = Number(year);
+
+    const evaluaciones = await Evaluacion.find(q).lean();
     res.json(evaluaciones);
   } catch (err) {
     next(err);
