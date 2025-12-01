@@ -22,6 +22,7 @@ import participacionesRoutes from './src/routes/participaciones.routes.js';
 import overridesRoutes from './src/routes/overrides.routes.js';
 import usuariosRoutes from './src/routes/usuarios.routes.js';
 import evaluacionRoutes from './src/routes/evaluacion.routes.js';
+import simulacionRoutes from './src/routes/simulacion.routes.js';
 
 // --- CONFIGURACIÓN INICIAL ---
 dotenv.config();
@@ -52,6 +53,7 @@ app.use('/api/overrides', overridesRoutes);
 app.use('/api/assignments', assignmentsRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/evaluaciones', evaluacionRoutes);
+app.use('/api/simulacion', simulacionRoutes);
 
 // Alias útil para debug del usuario autenticado
 app.get('/api/_whoami', whoami);

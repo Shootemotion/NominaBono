@@ -1,7 +1,8 @@
 export function mixGlobal({ obj = 0, apt = 0, pesos = { obj: 0.7, apt: 0.3 } }) {
   const po = Number(pesos?.obj ?? 0.7);
   const pa = Number(pesos?.apt ?? 0.3);
-  const norm = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+  // Permitimos que el score supere 100 si hay over-achievement
+  const norm = (v) => Math.max(0, Number(v) || 0);
   return +(norm(obj) * po + norm(apt) * pa).toFixed(2);
 }
 
@@ -13,7 +14,7 @@ export function bonoLineal({ global, maxPct = 0.3, minPct = 0, umbral = 60 }) {
 }
 
 export function bonoTramos({ global, tramos = [
-  { gte: 0,  pct: 0.00 },
+  { gte: 0, pct: 0.00 },
   { gte: 70, pct: 0.10 },
   { gte: 85, pct: 0.20 },
   { gte: 95, pct: 0.30 },

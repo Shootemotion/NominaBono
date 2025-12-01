@@ -87,11 +87,14 @@ const plantillaSchema = new mongoose.Schema(
       },
     ],
 
-    /* --- Metas (solo objetivos) --- */
-    metas: [
+metas: [
   {
-    nombre: { type: String, required: true },
-    target: { type: String },
+    nombre:   { type: String, required: true },
+
+    // 👉 target “esperado” numérico, no solo string
+    target:   { type: String },                 // lo podés seguir usando para UI
+    esperado: { type: Number, default: null },  // usado para cálculo
+
     unidad: {
       type: String,
       enum: ["Cumple/No Cumple", "Porcentual", "Numerico"],
@@ -103,7 +106,15 @@ const plantillaSchema = new mongoose.Schema(
       default: ">=",
     },
 
-    // 🔹 NUEVO: modo por meta
+    // ⚖️ peso interno de la meta dentro del objetivo
+    pesoMeta: { type: Number, min: 0, max: 100, default: null },
+
+    // 🎯 cómo se interpreta el valor
+    reconoceEsfuerzo: { type: Boolean, default: true },   // true = toma el % real
+    permiteOver:      { type: Boolean, default: false },  // true = puede ir a 120%
+    tolerancia:       { type: Number, default: 0 },       // ej: 2 → 78% cuenta como 80%
+
+    // 📈 método/“modo de seguimiento”
     modoAcumulacion: {
       type: String,
       enum: ["periodo", "acumulativo"],
@@ -114,8 +125,22 @@ const plantillaSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // 🏁 regla de cierre (a nivel meta)
+    reglaCierre: {
+      type: String,
+      enum: ["promedio", "umbral_periodos", "cierre_unico"],
+      default: "promedio",
+    },
+
+    // opcional: si queremos que una meta tenga frecuencia distinta del objetivo
+    // frecuenciaMeta: {
+    //   type: String,
+    //   enum: ["mensual", "trimestral", "semestral", "anual"],
+    // },
   },
 ],
+
 
     /* --- SISTEMA DE FECHAS AUTOMÁTICAS --- */
     fechaInicioFiscal: { type: Date }, // se completa solo
