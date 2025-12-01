@@ -4,7 +4,7 @@ import Navbar from '@/components/Navbar';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getToken } from '@/lib/api';
-import { Toaster } from "@/components/ui/sonner"; 
+import { Toaster } from "@/components/ui/sonner";
 import EvaluacionFlujo from '@/pages/EvaluacionFlujo';
 import LegajoEmpleado from '@/pages/LegajoEmpleado.jsx';
 // Importar Paginas
@@ -14,7 +14,7 @@ import SeguimientoEjecutivo from '@/pages/SeguimientoEjecutivo';
 import Login from '@/pages/Login';
 import Forbidden from '@/pages/Forbidden';
 import DashboardDesempeno from '@/pages/SeguimientoReferente';
-import MiDesempeno from '@/pages/MiDesempeno';    
+import MiDesempeno from '@/pages/MiDesempeno';
 import Home from '@/pages/Home';
 import Nomina from '@/pages/Nomina';
 import GestionPlantillas from '@/pages/GestionPlantillas';
@@ -22,6 +22,7 @@ import EditorAsignacion from '@/pages/EditorAsignacion';
 import CompleteInvite from '@/components/CompleteInvite';
 import UsuariosAdmin from '@/pages/UsuariosAdmin';
 import GestionDepartamentos from './pages/GestionDepartamentos';
+import SimuladorObjetivos from '@/pages/SimuladorObjetivos';
 
 
 function App() {
@@ -51,37 +52,37 @@ function App() {
           />
 
           <Route
-        path="/gestion-estructura"
-element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh', 'jefe_area','visor']} allowReferente={true}>
-      <GestionEstructura />
-    </RequireAuth>
-  }
-/>
+            path="/gestion-estructura"
+            element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh', 'jefe_area', 'visor']} allowReferente={true}>
+              <GestionEstructura />
+            </RequireAuth>
+            }
+          />
 
-           <Route
-   path="/nomina/legajo/:id"
-   element={
-     <RequireAuth allow={['superadmin', 'directivo', 'rrhh']} allowReferente={true}>
-       <LegajoEmpleado />
-     </RequireAuth>
-   }
- />
+          <Route
+            path="/nomina/legajo/:id"
+            element={
+              <RequireAuth allow={['superadmin', 'directivo', 'rrhh']} allowReferente={true}>
+                <LegajoEmpleado />
+              </RequireAuth>
+            }
+          />
 
-  <Route
-     path="/rrhh-evaluaciones"
-     element={
-       <RequireAuth allow={['superadmin','directivo','rrhh']}>
-         <RRHHEvaluaciones />
-       </RequireAuth>
-     }
-   />
-         <Route
-      path="/seguimiento"
-element={<RequireAuth allow={['directivo','rrhh','jefe_area','jefe_sector','superadmin','visor']} allowReferente={true}>
-      <DashboardDesempeno />
-    </RequireAuth>
-  }
-/>
+          <Route
+            path="/rrhh-evaluaciones"
+            element={
+              <RequireAuth allow={['superadmin', 'directivo', 'rrhh']}>
+                <RRHHEvaluaciones />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/seguimiento"
+            element={<RequireAuth allow={['directivo', 'rrhh', 'jefe_area', 'jefe_sector', 'superadmin', 'visor']} allowReferente={true}>
+              <DashboardDesempeno />
+            </RequireAuth>
+            }
+          />
 
           {/* Dashboard individual */}
           <Route
@@ -92,12 +93,12 @@ element={<RequireAuth allow={['directivo','rrhh','jefe_area','jefe_sector','supe
               </RequireAuth>
             }
           />
-     {/* Página dedicada de evaluación (reemplaza el modal) */}
+          {/* Página dedicada de evaluación (reemplaza el modal) */}
           <Route
             path="/evaluacion/:plantillaId/:periodo/:empleadoId?"
             element={
               <RequireAuth
-                allow={['superadmin','directivo','rrhh','jefe_area','jefe_sector']}
+                allow={['superadmin', 'directivo', 'rrhh', 'jefe_area', 'jefe_sector']}
                 allowReferente={true}
               >
                 <EvaluacionFlujo />
@@ -108,60 +109,69 @@ element={<RequireAuth allow={['directivo','rrhh','jefe_area','jefe_sector','supe
 
           <Route
             path="/nomina"
-    element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh']}>
-                <Nomina />
-              </RequireAuth>
+            element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh']}>
+              <Nomina />
+            </RequireAuth>
             }
           />
-<Route
-        path="/plantillas"         
-         element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh']}>
-               <GestionPlantillas />
+          <Route
+            path="/plantillas"
+            element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh']}>
+              <GestionPlantillas />
             </RequireAuth>
-           }
-         />
+            }
+          />
 
-         {/* Editor de asignación (ajustar pesos / excluir personas) */}
-         <Route
-           path="/asignaciones"
-           element={<RequireAuth allow={['superadmin','directivo','rrhh','jefe_area','jefe_sector']}>
-               <EditorAsignacion />
-             </RequireAuth>
-           }
-         />
-                     <Route
+          {/* Editor de asignación (ajustar pesos / excluir personas) */}
+          <Route
+            path="/asignaciones"
+            element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh', 'jefe_area', 'jefe_sector']}>
+              <EditorAsignacion />
+            </RequireAuth>
+            }
+          />
+          <Route
             path="/gestion-departamentos"
             element={
-              <RequireAuth allow={['superadmin','directivo','rrhh','jefe_area','jefe_sector']}>
+              <RequireAuth allow={['superadmin', 'directivo', 'rrhh', 'jefe_area', 'jefe_sector']}>
                 <GestionDepartamentos />
               </RequireAuth>
             }
           />
-              <Route
+          <Route
             path="/seguimiento-ejecutivo"
             element={
-              <RequireAuth allow={['superadmin','directivo','rrhh','jefe_area','jefe_sector']}>
+              <RequireAuth allow={['superadmin', 'directivo', 'rrhh', 'jefe_area', 'jefe_sector']}>
                 <SeguimientoEjecutivo />
               </RequireAuth>
             }
           />
 
-<Route path="/complete-invite" element={<CompleteInvite />} />
+          <Route path="/complete-invite" element={<CompleteInvite />} />
 
-<Route
-  path="/usuarios"
-  element={
-    <RequireAuth allow={['superadmin','rrhh']}>
-      <UsuariosAdmin />
-    </RequireAuth>
-  }
-/>
-        
+          <Route
+            path="/usuarios"
+            element={
+              <RequireAuth allow={['superadmin', 'rrhh']}>
+                <UsuariosAdmin />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/simulador"
+            element={
+              <RequireAuth allow={['superadmin', 'rrhh', 'directivo', 'jefe_area', 'jefe_sector']}>
+                <SimuladorObjetivos />
+              </RequireAuth>
+            }
+          />
 
 
-            <Route path="/403" element={<Forbidden />} />
 
-  {/* Fallback */}
+          <Route path="/403" element={<Forbidden />} />
+
+          {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

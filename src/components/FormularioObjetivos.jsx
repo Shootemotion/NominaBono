@@ -24,35 +24,30 @@ export default function FormularioObjetivos({
   const [descripcion, setDescripcion] = useState("");
   const [proceso, setProceso] = useState("");
   const [year, setYear] = useState(initialYear || currentYear);
-  const [scopeType, setScopeType] = useState(initialScopeType || "area"); // "area" | "sector" | "empleado"
+  const [scopeType, setScopeType] = useState(initialScopeType || "area");
   const [scopeId, setScopeId] = useState(initialScopeId || "");
   const [frecuencia, setFrecuencia] = useState("anual");
-const [modoAcumulacion, setModoAcumulacion] = useState("periodo"); // "periodo" | "acumulativo"
-
+  const [modoAcumulacion, setModoAcumulacion] = useState("periodo");
   const [peso, setPeso] = useState(0);
-const MAX_LIST = 2000; // ajustá a gusto
-  // Metas
+
+  const MAX_LIST = 2000;
   const [metas, setMetas] = useState([]);
 
-  // envío/errores
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
-  // búsqueda empleados (autocomplete)
   const [empQuery, setEmpQuery] = useState("");
   const [empOpen, setEmpOpen] = useState(false);
   const empBoxRef = useRef(null);
 
+  const [usarFechaCierreCustom, setUsarFechaCierreCustom] = useState(false);
+  const [fechaCierre, setFechaCierre] = useState("");
 
-  
-const selectedEmpleado = useMemo(
-   () => {
-     const lista = Array.isArray(empleados) ? empleados : [];
-     const sid = scopeId != null ? String(scopeId) : "";
-     return lista.find(e => String(e?._id ?? e?.id) === sid) || null;
-   },
-   [scopeId, empleados]
- );
+  const selectedEmpleado = useMemo(() => {
+    const lista = Array.isArray(empleados) ? empleados : [];
+    const sid = scopeId != null ? String(scopeId) : "";
+    return lista.find((e) => String(e?._id ?? e?.id) === sid) || null;
+  }, [scopeId, empleados]);
 
   const empleadosFiltrados = useMemo(() => {
     const q = empQuery.trim().toLowerCase();
@@ -68,52 +63,74 @@ const selectedEmpleado = useMemo(
 
   // Cargar initialData
   useEffect(() => {
-  if (!initialData) return;
+    if (!initialData) return;
 
-  setNombre(initialData.nombre || "");
-  setDescripcion(initialData.descripcion || "");
-  setProceso(initialData.proceso || "");
-  setYear(initialData.year || currentYear);
+    setNombre(initialData.nombre || "");
+    setDescripcion(initialData.descripcion || "");
+    setProceso(initialData.proceso || "");
+    setYear(initialData.year || currentYear);
 
-  const apiScope = initialData.scopeType || "area";
-  setScopeType(apiScope);
+    const apiScope = initialData.scopeType || "area";
+    setScopeType(apiScope);
 
-  setScopeId(
-    apiScope === "area"
-      ? initialData.areaId || initialData.scopeId || ""
-      : apiScope === "sector"
-      ? initialData.sectorId || initialData.scopeId || ""
-      : initialData.empleadoId || initialData.scopeId || ""
-  );
-setFrecuencia(initialData.frecuencia || "anual");
-setModoAcumulacion(
-  initialData.modoAcumulacion ||
-    (initialData.acumulativo ? "acumulativo" : "periodo")
-);
-setPeso(initialData.pesoBase ?? initialData.peso ?? 0);
+    setScopeId(
+      apiScope === "area"
+        ? initialData.areaId || initialData.scopeId || ""
+        : apiScope === "sector"
+          ? initialData.sectorId || initialData.scopeId || ""
+          : initialData.empleadoId || initialData.scopeId || ""
+    );
 
- setMetas(
-  Array.isArray(initialData.metas)
-    ? initialData.metas.map((m) => ({
-        nombre: m.nombre || "",
-        target: m.target ?? "",
-        unidad: m.unidad || "Porcentual",
-        operador: m.operador || ">=",
-        modoAcumulacion: m.modoAcumulacion || "periodo",
-        acumulativa: m.acumulativa ?? (m.modoAcumulacion === "acumulativo"),
-      }))
-    : []
-);
+    setFrecuencia(initialData.frecuencia || "anual");
+    setModoAcumulacion(
+      initialData.modoAcumulacion ||
+      (initialData.acumulativo ? "acumulativo" : "periodo")
+    );
+    setPeso(initialData.pesoBase ?? initialData.peso ?? 0);
 
+    // Metas con la nueva estructura (sin target de texto)
+    setMetas(
+      Array.isArray(initialData.metas)
+        ? initialData.metas.map((m) => ({
+          nombre: m.nombre || "",
+          unidad: m.unidad || "Porcentual",
+          operador: m.operador || ">=",
+          modoAcumulacion: m.modoAcumulacion || "periodo",
+          acumulativa:
+            m.acumulativa ??
+            (m.modoAcumulacion === "acumulativo" ? true : false),
 
-  // Override de cierre fiscal
-  setUsarFechaCierreCustom(!!initialData.fechaCierreCustom);
-  setFechaCierre(
-    initialData.fechaCierre
-      ? String(initialData.fechaCierre).slice(0, 10)
-      : ""
-  );
-}, [initialData]);
+          esperado:
+            m.esperado ??
+            (typeof m.target === "number" ? m.target : null) ??
+            "",
+
+          pesoMeta:
+            m.pesoMeta !== undefined && m.pesoMeta !== null
+              ? m.pesoMeta
+              : "",
+          reconoceEsfuerzo:
+            m.reconoceEsfuerzo !== undefined
+              ? m.reconoceEsfuerzo
+              : true,
+          permiteOver:
+            m.permiteOver !== undefined ? m.permiteOver : false,
+          tolerancia:
+            m.tolerancia !== undefined && m.tolerancia !== null
+              ? m.tolerancia
+              : 0,
+          reglaCierre: m.reglaCierre || "promedio",
+        }))
+        : []
+    );
+
+    setUsarFechaCierreCustom(!!initialData.fechaCierreCustom);
+    setFechaCierre(
+      initialData.fechaCierre
+        ? String(initialData.fechaCierre).slice(0, 10)
+        : ""
+    );
+  }, [initialData, currentYear]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -122,23 +139,28 @@ setPeso(initialData.pesoBase ?? initialData.peso ?? 0);
       }
     }
     if (empOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
   }, [empOpen]);
 
   // Metas helpers
-const handleAddMeta = () =>
-  setMetas((m) => [
-    ...m,
-    {
-      nombre: "",
-      target: "",
-      unidad: "Porcentual",
-      operador: ">=",
-      modoAcumulacion: "periodo",
-      acumulativa: false,
-    },
-  ]);
-
+  const handleAddMeta = () =>
+    setMetas((m) => [
+      ...m,
+      {
+        nombre: "",
+        unidad: "Porcentual",
+        operador: ">=",
+        modoAcumulacion: "periodo",
+        acumulativa: false,
+        esperado: "",
+        pesoMeta: "",
+        reconoceEsfuerzo: true,
+        permiteOver: false,
+        tolerancia: 0,
+        reglaCierre: "promedio",
+      },
+    ]);
 
   const handleMetaChange = (idx, field, value) =>
     setMetas((prev) =>
@@ -157,9 +179,6 @@ const handleAddMeta = () =>
     return { status, message: msg, raw: err, data };
   };
 
-
-  
-
   const validateClient = () => {
     const errs = {};
     if (!scopeId) {
@@ -170,7 +189,7 @@ const handleAddMeta = () =>
     }
     if (!nombre.trim()) errs.nombre = "El nombre es obligatorio.";
     if (!proceso.trim()) errs.proceso = "El campo Proceso es obligatorio.";
-  
+
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -185,52 +204,85 @@ const handleAddMeta = () =>
       return;
     }
 
-    // limpiar metas vacías y castear target si es numérico
+    // limpiar metas y castear números
     const metasClean = (metas || [])
-  .map((m) => ({
-    nombre: (m.nombre || "").trim(),
-    target:
-      m.target === "" || m.target == null
-        ? null
-        : isNaN(+m.target)
-        ? m.target
-        : Number(m.target),
-    unidad: (m.unidad || "").trim(),
-    operador: m.operador || ">=",
-    modoAcumulacion: m.modoAcumulacion || "periodo",
-    acumulativa: m.acumulativa === true || m.modoAcumulacion === "acumulativo",
-  }))
-  .filter((m) => m.nombre || m.target !== null || m.unidad);
+      .map((m) => {
+        const esperadoNum =
+          m.esperado === "" || m.esperado == null
+            ? null
+            : Number(m.esperado);
+        const pesoMetaNum =
+          m.pesoMeta === "" || m.pesoMeta == null
+            ? null
+            : Number(m.pesoMeta);
+        const toleranciaNum =
+          m.tolerancia === "" || m.tolerancia == null
+            ? 0
+            : Number(m.tolerancia);
 
+        const unidad = m.unidad || "Porcentual";
+        const esBinaria = unidad === "Cumple/No Cumple";
 
-    // el backend usa los mismos literales para scopeType
-const body = {
-  tipo: "objetivo",
-  year: Number(year),
-  scopeType,
-  scopeId,
-  nombre,
-  descripcion,
-  proceso,
-  frecuencia,
-  modoAcumulacion,                               // 👈 nuevo
-  acumulativo: modoAcumulacion === "acumulativo", // 👈 bandera cómoda
-  pesoBase: Number(peso || 0),
-  activo: true,
-};
+        return {
+          nombre: (m.nombre || "").trim(),
+          target: null, // 🔹 dejamos de usar el target de texto
+          esperado:
+            esperadoNum !== null && !Number.isNaN(esperadoNum)
+              ? esperadoNum
+              : null,
+          unidad,
+          operador: esBinaria ? ">=" : m.operador || ">=",
+          modoAcumulacion: m.modoAcumulacion || "periodo",
+          acumulativa:
+            m.modoAcumulacion === "acumulativo" ||
+            !!m.acumulativa,
+          pesoMeta:
+            pesoMetaNum !== null && !Number.isNaN(pesoMetaNum)
+              ? pesoMetaNum
+              : null,
+          reconoceEsfuerzo: esBinaria
+            ? false
+            : m.reconoceEsfuerzo !== false,
+          permiteOver:
+            esBinaria ? false : m.permiteOver === true,
+          tolerancia:
+            !Number.isNaN(toleranciaNum) && toleranciaNum >= 0
+              ? toleranciaNum
+              : 0,
+          reglaCierre: m.reglaCierre || "promedio",
+        };
+      })
+      .filter((m) => m.nombre || m.esperado !== null);
 
+    const body = {
+      tipo: "objetivo",
+      year: Number(year),
+      scopeType,
+      scopeId,
+      nombre,
+      descripcion,
+      proceso,
+      frecuencia,
+      modoAcumulacion,
+      acumulativo: modoAcumulacion === "acumulativo",
+      pesoBase: Number(peso || 0),
+      activo: true,
+    };
 
-if (usarFechaCierreCustom && fechaCierre) {
-  body.fechaCierre = new Date(fechaCierre);
-  body.fechaCierreCustom = true;
-}
+    if (usarFechaCierreCustom && fechaCierre) {
+      body.fechaCierre = new Date(fechaCierre);
+      body.fechaCierreCustom = true;
+    }
 
     if (metasClean.length > 0) body.metas = metasClean;
 
     setIsSubmitting(true);
     try {
       const saved = isEdit
-        ? await api(`/templates/${initialData._id}`, { method: "PUT", body })
+        ? await api(`/templates/${initialData._id}`, {
+          method: "PUT",
+          body,
+        })
         : await api("/templates", { method: "POST", body });
 
       toast.success(isEdit ? "Objetivo actualizado" : "Objetivo creado");
@@ -245,8 +297,8 @@ if (usarFechaCierreCustom && fechaCierre) {
         info.status >= 500
           ? "Error del servidor"
           : info.status >= 400
-          ? "Datos inválidos"
-          : "No se pudo guardar";
+            ? "Datos inválidos"
+            : "No se pudo guardar";
       toast.error(`${prefix}: ${info.message}`);
 
       console.groupCollapsed(
@@ -269,10 +321,11 @@ if (usarFechaCierreCustom && fechaCierre) {
 
   const FieldError = ({ name }) =>
     fieldErrors?.[name] ? (
-      <p className="mt-1 text-xs text-red-600">{String(fieldErrors[name])}</p>
+      <p className="mt-1 text-xs text-red-600">
+        {String(fieldErrors[name])}
+      </p>
     ) : null;
 
-     // Opciones “Proceso” (igual que en Aptitudes)
   const PROCESOS = [
     { value: "", label: "Seleccioná un proceso…" },
     { value: "Económico", label: "Económico" },
@@ -280,8 +333,6 @@ if (usarFechaCierreCustom && fechaCierre) {
     { value: "Organizacional", label: "Organizacional" },
   ];
 
-  const [usarFechaCierreCustom, setUsarFechaCierreCustom] = useState(false);
-const [fechaCierre, setFechaCierre] = useState("");
   return (
     <form onSubmit={(e) => handleSubmit(e)} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -298,27 +349,28 @@ const [fechaCierre, setFechaCierre] = useState("");
               className={inputCls}
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej.: Comunicación con clientes"
+              placeholder="Ej.: Lograr una rentabilidad superior al 18%"
               required
             />
             <FieldError name="nombre" />
           </div>
 
-
-   <div>
-    <label className="text-xs">Proceso</label>
-    <select
-      className={inputCls}
-     value={proceso}
-      onChange={(e) => setProceso(e.target.value)}
-      required
-    >
-      {PROCESOS.map((p) => (
-        <option key={p.value || "blank"} value={p.value}>{p.label}</option>
-      ))}
-    </select>
-    <FieldError name="proceso" />
-  </div>
+          <div>
+            <label className="text-xs">Proceso</label>
+            <select
+              className={inputCls}
+              value={proceso}
+              onChange={(e) => setProceso(e.target.value)}
+              required
+            >
+              {PROCESOS.map((p) => (
+                <option key={p.value || "blank"} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <FieldError name="proceso" />
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -342,34 +394,34 @@ const [fechaCierre, setFechaCierre] = useState("");
               >
                 <option value="mensual">Mensual</option>
                 <option value="trimestral">Trimestral</option>
+                <option value="semestral">Semestral</option>
+                <option value="anual">Anual</option>
               </select>
               <FieldError name="frecuencia" />
             </div>
           </div>
-          
 
+          <div>
+            <label className="text-xs flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={usarFechaCierreCustom}
+                onChange={(e) =>
+                  setUsarFechaCierreCustom(e.target.checked)
+                }
+              />
+              Fecha de cierre diferente al 31/08 del año fiscal
+            </label>
 
-
-<div>
-  <label className="text-xs flex items-center gap-2">
-    <input
-      type="checkbox"
-      checked={usarFechaCierreCustom}
-      onChange={(e) => setUsarFechaCierreCustom(e.target.checked)}
-    />
-    Fecha de cierre diferente al 31/08 del año fiscal
-  </label>
-
-  {usarFechaCierreCustom && (
-    <input
-      type="date"
-      className={inputCls}
-      value={fechaCierre}
-      onChange={(e) => setFechaCierre(e.target.value)}
-    />
-  )}
-</div>
-        
+            {usarFechaCierreCustom && (
+              <input
+                type="date"
+                className={inputCls}
+                value={fechaCierre}
+                onChange={(e) => setFechaCierre(e.target.value)}
+              />
+            )}
+          </div>
         </div>
 
         {/* DERECHA - Configuración */}
@@ -385,11 +437,10 @@ const [fechaCierre, setFechaCierre] = useState("");
                   setScopeType("area");
                   setScopeId("");
                 }}
-                className={`rounded-md border px-2 py-2 text-sm ${
-                  scopeType === "area"
+                className={`rounded-md border px-2 py-2 text-sm ${scopeType === "area"
                     ? "bg-primary/10 text-primary border-primary/30"
                     : "bg-background hover:bg-accent"
-                }`}
+                  }`}
               >
                 Área
               </button>
@@ -399,11 +450,10 @@ const [fechaCierre, setFechaCierre] = useState("");
                   setScopeType("sector");
                   setScopeId("");
                 }}
-                className={`rounded-md border px-2 py-2 text-sm ${
-                  scopeType === "sector"
+                className={`rounded-md border px-2 py-2 text-sm ${scopeType === "sector"
                     ? "bg-primary/10 text-primary border-primary/30"
                     : "bg-background hover:bg-accent"
-                }`}
+                  }`}
               >
                 Sector
               </button>
@@ -414,11 +464,10 @@ const [fechaCierre, setFechaCierre] = useState("");
                   setScopeId("");
                   setEmpQuery("");
                 }}
-                className={`rounded-md border px-2 py-2 text-sm ${
-                  scopeType === "empleado"
+                className={`rounded-md border px-2 py-2 text-sm ${scopeType === "empleado"
                     ? "bg-primary/10 text-primary border-primary/30"
                     : "bg-background hover:bg-accent"
-                }`}
+                  }`}
               >
                 Empleado
               </button>
@@ -516,7 +565,10 @@ const [fechaCierre, setFechaCierre] = useState("");
                             key={e._id}
                             type="button"
                             className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
-                           onClick={() => { setScopeId(String(e._id ?? e.id)); setEmpOpen(false); }}
+                            onClick={() => {
+                              setScopeId(String(e._id ?? e.id));
+                              setEmpOpen(false);
+                            }}
                           >
                             {e.apellido}, {e.nombre}
                             {e.apodo ? (
@@ -564,119 +616,277 @@ const [fechaCierre, setFechaCierre] = useState("");
         <FieldError name="descripcion" />
       </div>
 
-     {/* Metas */}
-<div className="space-y-3 border-t pt-4">
-  <h3 className="text-base font-semibold">📌 Metas</h3>
- {metas.map((m, i) => (
-  <div
-  key={i}
-  className="grid grid-cols-1 gap-3 items-end bg-muted/20 rounded-md p-2
-             md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
->
+      {/* Metas */}
+      <div className="space-y-3 border-t pt-4">
+        <h3 className="text-base font-semibold">📌 Metas</h3>
 
-    {/* Nombre */}
-    <div>
-      <label className="text-xs">Nombre</label>
-      <input
-        className="w-full rounded-md border px-2 py-1 text-sm"
-        value={m.nombre}
-        onChange={(e) => handleMetaChange(i, "nombre", e.target.value)}
-      />
-    </div>
+        {metas.map((m, i) => {
+          const esBinaria = m.unidad === "Cumple/No Cumple";
+          return (
+            <div
+              key={i}
+              className="relative rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md"
+            >
+              {/* Header / Barra superior */}
+              <div className="flex items-start justify-between gap-4 border-b bg-muted/30 p-4">
+                <div className="flex-1 space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Nombre de la Meta
+                  </label>
+                  <input
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={m.nombre}
+                    onChange={(e) =>
+                      handleMetaChange(i, "nombre", e.target.value)
+                    }
+                    placeholder="Ej.: Alcanzar 95% de satisfacción..."
+                  />
+                </div>
+                <div className="w-24 space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Peso (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={m.pesoMeta ?? ""}
+                      onChange={(e) =>
+                        handleMetaChange(i, "pesoMeta", e.target.value)
+                      }
+                    />
+                    <span className="absolute right-3 top-2 text-xs text-muted-foreground">
+                      %
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="mt-6 h-9 w-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => handleRemoveMeta(i)}
+                  title="Eliminar meta"
+                >
+                  ✕
+                </Button>
+              </div>
 
-    {/* Unidad */}
-    <div>
-      <label className="text-xs">Unidad</label>
-      <select
-        className="w-full rounded-md border px-2 py-1 text-sm"
-        value={m.unidad}
-        onChange={(e) => handleMetaChange(i, "unidad", e.target.value)}
-      >
-        <option value="Cumple/No Cumple">Cumple/No Cumple</option>
-        <option value="Porcentual">Porcentual</option>
-        <option value="Numerico">Numérico</option>
-      </select>
-    </div>
+              {/* Body / Contenido */}
+              <div className="grid gap-6 p-4 md:grid-cols-2 lg:grid-cols-3">
+                {/* Grupo 1: Configuración Básica */}
+                <div className="space-y-4">
+                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                    Configuración
+                  </h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">
+                        Unidad de Medida
+                      </label>
+                      <select
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        value={m.unidad}
+                        onChange={(e) =>
+                          handleMetaChange(i, "unidad", e.target.value)
+                        }
+                      >
+                        <option value="Porcentual">Porcentual (%)</option>
+                        <option value="Numerico">Numérico (#)</option>
+                        <option value="Cumple/No Cumple">
+                          Binaria (Cumple/No)
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">
+                        Modo de Seguimiento
+                      </label>
+                      <select
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        value={m.modoAcumulacion || "periodo"}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          handleMetaChange(i, "modoAcumulacion", v);
+                          handleMetaChange(
+                            i,
+                            "acumulativa",
+                            v === "acumulativo"
+                          );
+                        }}
+                      >
+                        <option value="periodo">Por Período (Independiente)</option>
+                        <option value="acumulativo">Acumulativo (Suma)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">
+                        Regla de Cierre Anual
+                      </label>
+                      <select
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        value={m.reglaCierre || "promedio"}
+                        onChange={(e) =>
+                          handleMetaChange(i, "reglaCierre", e.target.value)
+                        }
+                      >
+                        <option value="promedio">Promedio de Hitos</option>
+                        <option value="umbral_periodos">
+                          Umbral de Períodos
+                        </option>
+                        <option value="cierre_unico">
+                          Último Valor / Cierre Único
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
- {/* 🔹 Modo de acumulación */}
-  <div>
-    <label className="text-xs">Modo</label>
-    <select
-      className="w-full rounded-md border px-2 py-1 text-sm"
-      value={m.modoAcumulacion || "periodo"}
-      onChange={(e) => {
-        const v = e.target.value;
-        handleMetaChange(i, "modoAcumulacion", v);
-        handleMetaChange(i, "acumulativa", v === "acumulativo");
-      }}
-    >
-      <option value="periodo">Por período</option>
-      <option value="acumulativo">Acumulativo</option>
-    </select>
-  </div>
+                {/* Grupo 2: Objetivo y Cálculo */}
+                <div className="space-y-4 border-l pl-0 md:pl-6 lg:border-l">
+                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                    Objetivo
+                  </h4>
+                  {esBinaria ? (
+                    <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+                      <p>
+                        Esta meta es binaria. Se evaluará como "Cumple" o "No
+                        Cumple" en cada hito.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1 block text-xs text-muted-foreground">
+                            Operador
+                          </label>
+                          <select
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+                            value={m.operador || ">="}
+                            onChange={(e) =>
+                              handleMetaChange(i, "operador", e.target.value)
+                            }
+                          >
+                            <option value=">=">{">="} Mayor o igual</option>
+                            <option value=">">{">"} Mayor que</option>
+                            <option value="<=">{"<="} Menor o igual</option>
+                            <option value="<">{"<"} Menor que</option>
+                            <option value="==">{"=="} Igual a</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-muted-foreground">
+                            Valor Esperado
+                          </label>
+                          <input
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            type="number"
+                            placeholder="0.00"
+                            value={m.esperado ?? ""}
+                            onChange={(e) =>
+                              handleMetaChange(i, "esperado", e.target.value)
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-muted-foreground">
+                          Tolerancia (puntos)
+                        </label>
+                        <input
+                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                          type="number"
+                          min={0}
+                          value={m.tolerancia ?? 0}
+                          onChange={(e) =>
+                            handleMetaChange(i, "tolerancia", e.target.value)
+                          }
+                        />
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          Margen aceptable antes de considerar incumplimiento.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
+                {/* Grupo 3: Opciones Avanzadas */}
+                <div className="space-y-4 border-l pl-0 md:pl-6 lg:border-l">
+                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                    Opciones
+                  </h4>
+                  <div className="space-y-3">
+                    {!esBinaria && (
+                      <>
+                        <label className="flex cursor-pointer items-start gap-3 rounded-md border p-2 hover:bg-accent">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={!!m.reconoceEsfuerzo}
+                            onChange={(e) =>
+                              handleMetaChange(
+                                i,
+                                "reconoceEsfuerzo",
+                                e.target.checked
+                              )
+                            }
+                          />
+                          <div className="space-y-0.5">
+                            <span className="block text-sm font-medium">
+                              Reconoce Esfuerzo
+                            </span>
+                            <span className="block text-[10px] text-muted-foreground">
+                              Permite puntaje parcial si no se llega al 100%.
+                            </span>
+                          </div>
+                        </label>
 
-    {/* Target + Operador (solo si no es Cumple/No Cumple) */}
-    {m.unidad !== "Cumple/No Cumple" && (
-      <>
-        <div>
-          <label className="text-xs">Target</label>
-          <input
-            className="w-full rounded-md border px-2 py-1 text-sm"
-            value={m.target}
-            onChange={(e) => handleMetaChange(i, "target", e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-xs">Operador</label>
-          <select
-            className="w-full rounded-md border px-2 py-1 text-sm"
-            value={m.operador || ">="}
-            onChange={(e) => handleMetaChange(i, "operador", e.target.value)}
-          >
-            <option value=">=">{">="}</option>
-            <option value=">">{">"}</option>
-            <option value="<=">{"<="}</option>
-            <option value="<">{"<"}</option>
-            <option value="==">{"=="}</option>
-            <option value="!=">{"!="}</option>
-          </select>
-        </div>
-      </>
-    )}
+                        <label className="flex cursor-pointer items-start gap-3 rounded-md border p-2 hover:bg-accent">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={!!m.permiteOver}
+                            onChange={(e) =>
+                              handleMetaChange(
+                                i,
+                                "permiteOver",
+                                e.target.checked
+                              )
+                            }
+                          />
+                          <div className="space-y-0.5">
+                            <span className="block text-sm font-medium">
+                              Permite Over-achievement
+                            </span>
+                            <span className="block text-[10px] text-muted-foreground">
+                              Permite superar el 100% (hasta 120%).
+                            </span>
+                          </div>
+                        </label>
+                      </>
+                    )}
+                    {esBinaria && (
+                      <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
+                        Sin opciones adicionales para metas binarias.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
-    {/* Cumple/No cumple (checkbox) */}
-    {m.unidad === "Cumple/No Cumple" && (
-      <div className="flex items-center">
-        <label className="text-xs mr-2">Cumplimiento</label>
-        <input
-          type="checkbox"
-          className="h-4 w-4"
-          checked={!!m.cumple}
-          onChange={(e) => handleMetaChange(i, "cumple", e.target.checked)}
-        />
+        <Button type="button" variant="secondary" onClick={handleAddMeta}>
+          ➕ Agregar meta
+        </Button>
       </div>
-    )}
-
-    {/* Botón eliminar */}
-<div className="flex justify-end items-center col-span-full lg:col-span-1">
-  <Button
-    type="button"
-    variant="destructive"
-    size="sm"
-    className="h-8 px-2 bg-rose-100 text-rose-700 hover:bg-rose-200 border-0"
-    onClick={() => handleRemoveMeta(i)}
-  >
-    ✕
-  </Button>
-</div>
-  </div>
-))}
-<Button type="button" variant="secondary" onClick={handleAddMeta}>
-  ➕ Agregar meta
-</Button>
-
-</div>
 
       {/* Botones */}
       <div className="flex justify-end gap-2 border-t pt-3">
@@ -699,7 +909,11 @@ const [fechaCierre, setFechaCierre] = useState("");
           </Button>
         )}
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Guardando…" : isEdit ? "Guardar cambios" : "Crear objetivo"}
+          {isSubmitting
+            ? "Guardando…"
+            : isEdit
+              ? "Guardar cambios"
+              : "Crear objetivo"}
         </Button>
       </div>
     </form>

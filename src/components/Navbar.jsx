@@ -113,8 +113,7 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
   }
 
   const linkClass = ({ isActive }) =>
-    `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-      isActive ? 'text-foreground bg-muted' : 'text-white/90 hover:text-white hover:bg-white/10'
+    `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? 'text-foreground bg-muted' : 'text-white/90 hover:text-white hover:bg-white/10'
     }`;
 
   const renderNavItem = (to, label, allowed) => {
@@ -158,10 +157,13 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
                 {renderNavItem('/seguimiento-ejecutivo', 'Seguimiento Ejecutivo', true)}
 
                 {/* Objetivos (solo RRHH o Directivos) */}
-               {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/plantillas', 'Objetivos', true)}
+                {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/plantillas', 'Objetivos', true)}
                 {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/rrhh-evaluaciones', 'Cierre RRHH', true)}
                 {/* Asignaciones (solo RRHH o Directivos) */}
                 {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/asignaciones', 'Asignaciones', true)}
+
+                {/* Simulador (Jefes, RRHH, Directivos) */}
+                {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/simulador', 'Simulador', true)}
 
                 {/* Seguimiento (RRHH/Directivos/Nómina/Referentes) */}
                 {(hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente) &&

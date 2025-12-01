@@ -20,6 +20,7 @@ import {
   createEvaluacion,              // POST /evaluaciones
   listPendingHR,                 // GET  /evaluaciones/hr/pending
   closeBulk,                     // POST /evaluaciones/hr/close-bulk
+  getScoringAnualEmpleado ,
 } from "../controllers/evaluacion.controller.js";
 
 const router = Router();
@@ -81,6 +82,13 @@ router.post(
   authenticateJWT,
   requireCap("nomina:evaluar"),
   submitToHR
+);
+
+router.get(
+  "/empleados/:empleadoId/scoring-anual",
+  authenticateJWT,
+  requireCap("rrhh:evaluaciones:cierre"),
+  getScoringAnualEmpleado
 );
 
 router.post(

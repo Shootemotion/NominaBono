@@ -61,29 +61,44 @@ const evaluacionSchema = new mongoose.Schema(
 
     // 📌 Resultados por meta (lo que ya venías usando)
     metasResultados: [
-      {
-        nombre:          { type: String, required: true },
-        unidad:          { type: String }, // "Numérico", "Cumple/No Cumple", etc.
-        operador:        { type: String, default: ">=" },
+  {
+    // 🔗 referencia a la meta de la plantilla (muy útil para mergear config)
+    metaId:  { type: mongoose.Schema.Types.ObjectId },
 
-        // 👉 target de la meta (lo que viene de la plantilla)
-        esperado:        { type: Number, default: null },
+    nombre:  { type: String, required: true },
+    unidad:  { type: String }, // "Cumple/No Cumple" | "Porcentual" | "Numerico"
+    operador:{ type: String, default: ">=" },
 
-        // 👉 cómo se evalúa en el tiempo
-        modoAcumulacion: {
-          type: String,
-          enum: ["acumulativo", "periodo"],
-          default: "periodo",
-        },
-        acumulativa:     { type: Boolean, default: false },
+    // target
+    esperado: { type: Number, default: null },
 
-        // 👉 valor que carga el jefe / sistema (puede ser número o boolean)
-        resultado:       { type: mongoose.Schema.Types.Mixed, default: null },
+    // 💪 configuración copiada de la meta de plantilla
+    pesoMeta:         { type: Number, min: 0, max: 100, default: null },
+    reconoceEsfuerzo: { type: Boolean, default: true },
+    permiteOver:      { type: Boolean, default: false },
+    tolerancia:       { type: Number, default: 0 },
 
-        // 👉 flag ya evaluado (lo calcula tu lógica de negocio)
-        cumple:          { type: Boolean, default: false },
-      },
-    ],
+    modoAcumulacion: {
+      type: String,
+      enum: ["acumulativo", "periodo"],
+      default: "periodo",
+    },
+    acumulativa: { type: Boolean, default: false },
+
+    reglaCierre: {
+      type: String,
+      enum: ["promedio", "umbral_periodos", "cierre_unico"],
+      default: "promedio",
+    },
+
+    // valor cargado en el hito
+    resultado: { type: mongoose.Schema.Types.Mixed, default: null },
+
+    // flag de cumplimiento en ese hito
+    cumple:    { type: Boolean, default: false },
+  },
+],
+
 
 
     // Autoría de creación
