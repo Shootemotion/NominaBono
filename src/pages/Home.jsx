@@ -9,6 +9,9 @@ import {
   CalendarDays,
   Shield,
   UserCircle2,
+  FileText,
+  Briefcase,
+  LayoutDashboard
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import useCan, { useHasRole } from "@/hooks/useCan";
@@ -82,10 +85,10 @@ export default function Home() {
     (user?.isRRHH
       ? "RR.HH."
       : user?.isJefeArea
-      ? "Jefe de Área"
-      : user?.isJefeSector
-      ? "Jefe de Sector"
-      : "Usuario");
+        ? "Jefe de Área"
+        : user?.isJefeSector
+          ? "Jefe de Sector"
+          : "Usuario");
 
   const displayName =
     user?.fullName ||
@@ -96,71 +99,92 @@ export default function Home() {
 
   const CARDS = [
     {
+      key: "mi-desempeno",
+      title: "Mi Desempeño",
+      desc: "Visualizá tus objetivos, feedback y evolución.",
+      icon: UserCircle2,
+      to: "/mi-desempeno",
+      allow: !!user,
+      gradient: "from-blue-600 to-indigo-600",
+      textColor: "text-blue-50",
+    },
+    {
+      key: "mi-legajo",
+      title: "Mi Legajo",
+      desc: "Consultá tu información personal y laboral.",
+      icon: FileText,
+      to: user?.empleado?._id ? `/nomina/legajo/${user.empleado._id}` : "#",
+      allow: !!user?.empleado?._id,
+      gradient: "from-emerald-600 to-teal-600",
+      textColor: "text-emerald-50",
+    },
+    {
+      key: "simulador",
+      title: "Simulador de Objetivos",
+      desc: "Proyectá el cumplimiento de metas y bonos.",
+      icon: Calculator,
+      to: "/simulador",
+      allow: !!user, // Allow everyone to see the simulator if they have the link, or restrict? User said "agregues la pagina de simulador". I'll allow it for now.
+      gradient: "from-violet-600 to-purple-600",
+      textColor: "text-violet-50",
+    },
+    {
       key: "objetivos",
-      title: "Definir Objetivos",
-      desc: "Crear y administrar plantillas de objetivos y aptitudes.",
+      title: "Gestión de Objetivos",
+      desc: "Administrar plantillas y asignaciones.",
       icon: Target,
       to: "/plantillas",
       allow: hasRoleRRHH || hasRoleDirectivo,
-      color: "bg-teal-900/90",
+      gradient: "from-slate-700 to-slate-800",
+      textColor: "text-slate-50",
     },
     {
-      key: "seguimiento-ejecutivo",
-      title: "Seguimiento Ejecutivo",
-      desc: "Vista global de indicadores clave de la organización.",
-      icon: BarChart3,
-      to: "/seguimiento-ejecutivo",
-      allow: canViewEjecutivo,
-      color: "bg-sky-900/90",
-    },
-    {
-      key: "bonos",
-      title: "Cálculo de Bonos",
-      desc: "Gestión y simulación de bonificaciones anuales.",
-      icon: Calculator,
+      key: "seguimiento",
+      title: "Seguimiento",
+      desc: "Monitoreo de avance por áreas y sectores.",
+      icon: TrendingUp,
       to: "/seguimiento",
-      allow: hasRoleRRHH || hasRoleDirectivo,
-      color: "bg-emerald-900/90",
+      allow: hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente,
+      gradient: "from-orange-500 to-red-500",
+      textColor: "text-orange-50",
     },
     {
       key: "estructura",
       title: "Gestión de Equipo",
-      desc: "Administrar nómina, áreas y sectores.",
+      desc: "Nómina, estructura y organigrama.",
       icon: Users,
       to: "/gestion-estructura",
-      // 🔐 ahora se alinea con el permiso real
       allow: canViewEstructura,
-      color: "bg-cyan-900/90",
+      gradient: "from-cyan-600 to-blue-600",
+      textColor: "text-cyan-50",
     },
     {
-      key: "seguimiento",
-      title: "Seguimiento Organizacional",
-      desc: "Monitorear avance de objetivos por área, sector y referentes.",
-      icon: TrendingUp,
-      to: "/seguimiento",
-      allow:
-        hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente,
-      color: "bg-indigo-900/90",
-    },
-    {
-      key: "mi-desempeno",
-      title: "Mi Desempeño",
-      desc: "Ver tus objetivos, avances y feedback individual.",
-      icon: UserCircle2,
-      to: "/mi-desempeno",
-      allow: !!user,
-      color: "bg-slate-900/90",
+      key: "seguimiento-ejecutivo",
+      title: "Tablero Ejecutivo",
+      desc: "Indicadores clave de alto nivel.",
+      icon: LayoutDashboard,
+      to: "/seguimiento-ejecutivo",
+      allow: canViewEjecutivo,
+      gradient: "from-pink-600 to-rose-600",
+      textColor: "text-pink-50",
     },
   ];
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] w-full flex justify-center bg-muted/20">
-      <div className="w-full max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="rounded-xl overflow-hidden shadow-sm border border-border bg-card">
-          <div className="bg-[#075C66] text-white px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-full overflow-hidden border-2 border-white/40 shadow-md bg-white/10 flex items-center justify-center text-2xl font-semibold">
+    <div className="min-h-screen bg-[#f8fafc]">
+      {/* Hero Section with Gradient */}
+      <div className="relative bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] text-white pb-32 pt-12 px-6 lg:px-8 overflow-hidden">
+        {/* Abstract Background Shapes */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
+          <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500 rounded-full blur-3xl mix-blend-screen animate-pulse"></div>
+          <div className="absolute top-1/2 right-0 w-64 h-64 bg-purple-500 rounded-full blur-3xl mix-blend-screen opacity-60"></div>
+        </div>
+
+        <div className="relative max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="flex items-center gap-6">
+            <div className="relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-600 to-purple-600 rounded-full opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 blur"></div>
+              <div className="relative h-24 w-24 rounded-full overflow-hidden border-4 border-[#1e293b] bg-[#1e293b] shadow-2xl">
                 {avatarSrc ? (
                   <img
                     src={avatarSrc}
@@ -168,79 +192,83 @@ export default function Home() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <span>{initialsFromUser(user)}</span>
+                  <div className="h-full w-full flex items-center justify-center text-3xl font-bold text-slate-400 bg-slate-800">
+                    {initialsFromUser(user)}
+                  </div>
                 )}
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold leading-tight">
-                  Bienvenido, {displayName.split(" ")[0] || "Usuario"}
-                </h1>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5">
-                    <Shield className="h-4 w-4" />
-                    {prettyRol}
-                  </span>
-                  <span className="opacity-80">·</span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5">
-                    {puesto}
-                  </span>
-                  <span className="opacity-80">·</span>
-                  <span className="opacity-90">
-                    Portal de Desempeño Diagnos
-                  </span>
-                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 self-start md:self-auto">
-              <CalendarDays className="h-5 w-5" />
-              <div className="text-sm">
-                <div className="opacity-80">Período actual</div>
-                <div className="font-semibold">{periodo}</div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-2">
+                Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">{displayName.split(" ")[0]}</span>
+              </h1>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
+                <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
+                  <Shield className="h-3.5 w-3.5 text-emerald-400" />
+                  {prettyRol}
+                </span>
+                <span className="hidden md:inline text-slate-500">•</span>
+                <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
+                  <Briefcase className="h-3.5 w-3.5 text-blue-400" />
+                  {puesto}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 px-4 py-3 rounded-2xl shadow-xl">
+              <div className="p-2 bg-blue-500/20 rounded-lg">
+                <CalendarDays className="h-5 w-5 text-blue-400" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Período Actual</div>
+                <div className="text-lg font-bold text-white tracking-tight">{periodo}</div>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <h2 className="text-xl font-semibold">Navegación del sistema</h2>
+      {/* Main Content - Cards Grid */}
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 -mt-24 relative z-10 pb-12">
+        <h2 className="text-lg font-semibold text-white/90 mb-6 flex items-center gap-2">
+          <LayoutDashboard className="h-5 w-5" />
+          Panel de Control
+        </h2>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {CARDS.map(({ key, title, desc, icon: Icon, to, allow, color }) => {
-            const badge = allow ? "Acceso completo" : "Sin acceso";
-            const cardBody = (
-              <div
-                className={[
-                  "group rounded-xl border border-border bg-card hover:shadow-md transition overflow-hidden",
-                  !allow ? "opacity-55 pointer-events-none" : "",
-                ].join(" ")}
-              >
-                <div
-                  className={`h-16 ${color} text-white flex items-center justify-between px-4`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-white/10 grid place-items-center">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="text-lg font-semibold">{title}</div>
-                  </div>
-                  <span className="text-[11px] tracking-wide rounded-full bg-white/10 px-2 py-0.5">
-                    {badge}
-                  </span>
-                </div>
-                <div className="p-4 text-sm text-muted-foreground">{desc}</div>
-              </div>
-            );
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {CARDS.map(({ key, title, desc, icon: Icon, to, allow, gradient, textColor }) => {
+            if (!allow) return null;
 
-            return allow ? (
+            return (
               <Link
                 to={to}
                 key={key}
-                className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
+                className="group relative bg-white rounded-2xl p-6 shadow-lg shadow-slate-200/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 overflow-hidden"
               >
-                {cardBody}
+                <div className={`absolute top-0 right-0 p-24 bg-gradient-to-br ${gradient} opacity-[0.03] rounded-bl-full group-hover:scale-110 transition-transform duration-500`}></div>
+
+                <div className="relative z-10">
+                  <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    <Icon className={`h-6 w-6 text-white`} />
+                  </div>
+
+                  <h3 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-blue-600 transition-colors">
+                    {title}
+                  </h3>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    {desc}
+                  </p>
+                </div>
+
+                <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-x-2 group-hover:translate-x-0">
+                  <div className={`p-2 rounded-full bg-slate-50 text-slate-400`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+                  </div>
+                </div>
               </Link>
-            ) : (
-              <div key={key}>{cardBody}</div>
             );
           })}
         </div>

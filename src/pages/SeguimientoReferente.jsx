@@ -170,6 +170,7 @@ export default function SeguimientoReferente() {
   const [empSelectedId, setEmpSelectedId] = useState(null);
   const [showEmpHints, setShowEmpHints] = useState(false);
 
+  const [mainTab, setMainTab] = useState("objetivos"); // "objetivos" | "feedback"
   const [tipoFiltro, setTipoFiltro] = useState("todos");
   const [view, setView] = useState("gantt");
   const [zoom, setZoom] = useState("mes");
@@ -212,13 +213,12 @@ export default function SeguimientoReferente() {
         }
 
         // 2. Aplanar la estructura (Normalización)
-        // El backend puede devolver: [Item, Item] O [{items: [...]}] O [Dashboard, Dashboard]
         let flatRows = [];
 
         const processEntry = (entry) => {
           if (!entry) return;
 
-          // Caso: Objeto contenedor con propiedad 'items' (común en respuestas paginadas o de área)
+          // Caso: Objeto contenedor con propiedad 'items'
           if (Array.isArray(entry.items)) {
             entry.items.forEach(sub => processEntry(sub));
             return;
@@ -230,13 +230,50 @@ export default function SeguimientoReferente() {
             return;
           }
 
-          // Caso: Objeto válido (Dashboard o Item)
+          // Caso: Objeto válido
           flatRows.push(entry);
         };
 
         rawResponses.forEach(r => processEntry(r));
 
+        // --- INYECCIÓN DE FEEDBACK TRIMESTRAL ---
+        // 1. Identificar empleados únicos
+        const empleadosMap = new Map();
+        flatRows.forEach(row => {
+          if (row.empleado && row.empleado._id) {
+            empleadosMap.set(String(row.empleado._id), row.empleado);
+          }
+          if (Array.isArray(row.empleados)) {
+            row.empleados.forEach(e => {
+              if (e && e._id) empleadosMap.set(String(e._id), e);
+            });
+          }
+        });
+
+        // 2. Crear item de Feedback
+        const feedbackItems = [];
+        for (const emp of empleadosMap.values()) {
+          feedbackItems.push({
+            _id: `feedback-global`, // ID especial
+            _tipo: "feedback",
+            nombre: "Feedback Trimestral",
+            empleado: emp,
+            empleados: [emp],
+            area: emp.area,
+            sector: emp.sector,
+            peso: 0,
+            hitos: [
+              { periodo: "Q1", fecha: `${anio}-11-01` },
+              { periodo: "Q2", fecha: `${anio + 1}-02-01` },
+              { periodo: "Q3", fecha: `${anio + 1}-05-01` },
+              { periodo: "FINAL", fecha: `${anio + 1}-08-30` }
+            ]
+          });
+        }
+
+        flatRows.push(...feedbackItems);
         setRows(flatRows);
+
       } catch (e) {
         console.error(e);
         toast.error("Error al cargar datos.");
@@ -340,14 +377,25 @@ export default function SeguimientoReferente() {
     return data;
   }, [rows, areaFiltro, sectorFiltro, empSelectedId]);
 
-  // items planos (ya con tipoFiltro)
+  // items planos (ya con tipoFiltro y mainTab)
   const flatItems = useMemo(() => {
     const out = [];
     for (const r of filteredRows) {
-      out.push(...flatItemsFromRow(r, tipoFiltro));
+      out.push(...flatItemsFromRow(r, "todos")); // Traemos todo primero
     }
-    return out;
-  }, [filteredRows, tipoFiltro]);
+
+    // Filtrado por Pestaña Principal
+    if (mainTab === "feedback") {
+      return out.filter(i => i._tipo === "feedback");
+    } else {
+      // Pestaña Objetivos: mostrar objetivos/aptitudes según sub-filtro
+      return out.filter(i => {
+        if (i._tipo === "feedback") return false;
+        if (tipoFiltro === "todos") return true;
+        return i._tipo === tipoFiltro;
+      });
+    }
+  }, [filteredRows, tipoFiltro, mainTab]);
 
   // agrupación seleccionada + orden
   const grouped = useMemo(() => {
@@ -357,7 +405,7 @@ export default function SeguimientoReferente() {
   }, [flatItems, groupBy, sortDir]);
 
 
-   // agenda (vista calendario) – una entrada POR EMPLEADO, igual que el Gantt
+  // agenda (vista calendario) – una entrada POR EMPLEADO, igual que el Gantt
   const agendaList = useMemo(() => {
     if (view !== "agenda") return [];
     const entries = [];
@@ -399,8 +447,12 @@ export default function SeguimientoReferente() {
       Array.isArray(empleados) && empleados.length === 1
         ? empleados[0]._id
         : null;
+
+    // Si es feedback global
+    const pId = item._tipo === "feedback" ? "feedback-global" : item._id;
+
     navigate(
-      `/evaluacion/${item._id}/${hito.periodo}/${empId ?? ""}`,
+      `/evaluacion/${pId}/${hito.periodo}/${empId ?? ""}`,
       {
         state: {
           from: "seguimiento",
@@ -444,6 +496,28 @@ export default function SeguimientoReferente() {
           />
         </div>
 
+        {/* TABS PRINCIPALES */}
+        <div className="flex space-x-1 bg-slate-200 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setMainTab("objetivos")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${mainTab === "objetivos"
+                ? "bg-white text-blue-600 shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-300/50"
+              }`}
+          >
+            🎯 Objetivos y Metas
+          </button>
+          <button
+            onClick={() => setMainTab("feedback")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${mainTab === "feedback"
+                ? "bg-white text-blue-600 shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-300/50"
+              }`}
+          >
+            💬 Reuniones de Feedback
+          </button>
+        </div>
+
         {/* Controles superiores */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
@@ -461,38 +535,40 @@ export default function SeguimientoReferente() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Tipo</span>
-            <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-lg">
-              <button
-                className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "todos"
-                  ? "bg-white text-slate-900 shadow-sm font-medium"
-                  : "text-slate-600 hover:text-slate-900"
-                  }`}
-                onClick={() => setTipoFiltro("todos")}
-              >
-                Todos
-              </button>
-              <button
-                className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "objetivo"
-                  ? "bg-white text-slate-900 shadow-sm font-medium"
-                  : "text-slate-600 hover:text-slate-900"
-                  }`}
-                onClick={() => setTipoFiltro("objetivo")}
-              >
-                🎯 Objetivos
-              </button>
-              <button
-                className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "aptitud"
-                  ? "bg-white text-slate-900 shadow-sm font-medium"
-                  : "text-slate-600 hover:text-slate-900"
-                  }`}
-                onClick={() => setTipoFiltro("aptitud")}
-              >
-                💡 Aptitudes
-              </button>
+          {mainTab === "objetivos" && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Tipo</span>
+              <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-lg">
+                <button
+                  className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "todos"
+                    ? "bg-white text-slate-900 shadow-sm font-medium"
+                    : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  onClick={() => setTipoFiltro("todos")}
+                >
+                  Todos
+                </button>
+                <button
+                  className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "objetivo"
+                    ? "bg-white text-slate-900 shadow-sm font-medium"
+                    : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  onClick={() => setTipoFiltro("objetivo")}
+                >
+                  🎯 Objetivos
+                </button>
+                <button
+                  className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "aptitud"
+                    ? "bg-white text-slate-900 shadow-sm font-medium"
+                    : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  onClick={() => setTipoFiltro("aptitud")}
+                >
+                  💡 Aptitudes
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">Vencimientos</span>

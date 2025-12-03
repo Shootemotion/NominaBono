@@ -8,7 +8,7 @@
  * @param {string} unidad - "Cumple/No Cumple" | "Porcentual" | "Numerico".
  * @returns {number} - Porcentaje de cumplimiento (0–100).
  */
-export function calcularPorcentajeMeta(resultado, esperado, operador = ">=", unidad = "Numerico") {
+export function calcularPorcentajeMeta(resultado, esperado, operador = ">=", unidad = "Numerico", permiteOver = false) {
   if (unidad === "Cumple/No Cumple") {
     return resultado ? 100 : 0;
   }
@@ -17,19 +17,31 @@ export function calcularPorcentajeMeta(resultado, esperado, operador = ">=", uni
   const r = Number(resultado);
   const e = Number(esperado);
 
+  let p = 0;
+
   switch (operador) {
-    case ">=": return r >= e ? 100 : Math.min((r / e) * 100, 100);
-    case ">":  return r >  e ? 100 : Math.min((r / e) * 100, 100);
-    case "<=": return r <= e ? 100 : Math.min((e / (r || 1)) * 100, 100);
-    case "<":  return r <  e ? 100 : Math.min((e / (r || 1)) * 100, 100);
-    case "==": return r === e ? 100 : 0;
-    case "!=": return r !== e ? 100 : 0;
-    default:   return 0;
+    case ">=": p = r >= e ? 100 : (r / e) * 100; break;
+    case ">": p = r > e ? 100 : (r / e) * 100; break;
+    case "<=": p = r <= e ? 100 : (e / (r || 1)) * 100; break;
+    case "<": p = r < e ? 100 : (e / (r || 1)) * 100; break;
+    case "==": p = r === e ? 100 : 0; break;
+    case "!=": p = r !== e ? 100 : 0; break;
+    default: p = 0;
   }
+
+  // Si permiteOver es true, no limitamos a 100 (salvo que sea binaria o casos especiales)
+  // Si es false, limitamos a 100.
+  if (!permiteOver) {
+    p = Math.min(p, 100);
+  }
+
+  return Math.max(0, p);
 }
 
 export function evaluarCumple(resultado, esperado, operador = ">=", unidad = "Numerico") {
-  return calcularPorcentajeMeta(resultado, esperado, operador, unidad) === 100;
+  // Para evaluar si cumple, usamos la lógica estándar (sin over) para ver si llega al 100%
+  // O simplemente verificamos si el cálculo base (incluso con over) es >= 100
+  return calcularPorcentajeMeta(resultado, esperado, operador, unidad, true) >= 100;
 }
 
 export function calcularResultadoGlobal(metas) {
@@ -45,13 +57,15 @@ export function calcularResultadoGlobal(metas) {
         m.resultado,
         m.esperado,
         m.operador,
-        m.unidad
+        m.unidad,
+        m.permiteOver // Pasamos el flag
       );
       console.debug("[calcularResultadoGlobal] meta:", m.nombre, {
         resultado: m.resultado,
         esperado: m.esperado,
         operador: m.operador,
         unidad: m.unidad,
+        permiteOver: m.permiteOver,
         porcentaje,
         peso,
       });

@@ -1,54 +1,38 @@
-// src/pages/EvaluacionFlujo.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
-import TraceabilityCard from "@/components/seguimiento/TraceabilityCard";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
 import { api, API_ORIGIN } from "@/lib/api";
 import { evaluarCumple, calcularResultadoGlobal } from "@/lib/evaluarCumple";
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-} from "@/components/ui/alert-dialog";
-
 import { dashEmpleado } from "@/lib/dashboard";
-import { UserCircle2, CalendarClock } from "lucide-react";
+import {
+  UserCircle2,
+  ChevronDown,
+  ChevronUp,
+  Target,
+  Lightbulb,
+  Save,
+  Send,
+  MessageSquare,
+  BarChart3,
+  RefreshCw,
+  Calendar,
+  FileEdit,
+  Users,
+  CheckCircle
+} from "lucide-react";
 
 /* ===================== Constantes y helpers ===================== */
 
 const ESTADOS = [
-  {
-    code: "NO_ENVIADOS",
-    label: "No enviados",
-    color: "bg-slate-100 text-slate-700",
-    ring: "ring-slate-300",
-  },
-  {
-    code: "PENDING_EMPLOYEE",
-    label: "Enviados",
-    color: "bg-amber-100 text-amber-800",
-    ring: "ring-amber-300",
-  },
-  {
-    code: "PENDING_HR",
-    label: "En RRHH",
-    color: "bg-blue-100 text-blue-800",
-    ring: "ring-blue-300",
-  },
-  {
-    code: "CLOSED",
-    label: "Cerrados",
-    color: "bg-emerald-100 text-emerald-800",
-    ring: "ring-emerald-300",
-  },
+  { code: "NO_ENVIADOS", label: "No enviados", color: "bg-slate-100 text-slate-700", ring: "ring-slate-300" },
+  { code: "PENDING_EMPLOYEE", label: "Enviados", color: "bg-amber-100 text-amber-800", ring: "ring-amber-300" },
+  { code: "PENDING_HR", label: "En RRHH", color: "bg-blue-100 text-blue-800", ring: "ring-blue-300" },
+  { code: "CLOSED", label: "Cerrados", color: "bg-emerald-100 text-emerald-800", ring: "ring-emerald-300" },
 ];
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -57,46 +41,26 @@ const ProgressBar = ({ value = 0 }) => (
   <div className="w-full h-2.5 rounded-full bg-slate-200/80 overflow-hidden">
     <div
       className="h-full bg-gradient-to-r from-indigo-500 to-indigo-400 transition-[width] duration-300"
-      style={{
-        width: `${Math.max(0, Math.min(100, Math.round(value)))}%`,
-      }}
+      style={{ width: `${Math.max(0, Math.min(100, Math.round(value)))}%` }}
     />
   </div>
 );
 
 function buildResumenEmpleado(data) {
   if (!data) return null;
-
-  let objetivos = [];
-  let aptitudes = [];
-
-  if (Array.isArray(data.objetivos)) {
-    objetivos = data.objetivos;
-  } else if (Array.isArray(data.objetivos?.items)) {
-    objetivos = data.objetivos.items;
-  }
-
-  if (Array.isArray(data.aptitudes)) {
-    aptitudes = data.aptitudes;
-  } else if (Array.isArray(data.aptitudes?.items)) {
-    aptitudes = data.aptitudes.items;
-  }
+  let objetivos = Array.isArray(data.objetivos) ? data.objetivos : (data.objetivos?.items || []);
+  let aptitudes = Array.isArray(data.aptitudes) ? data.aptitudes : (data.aptitudes?.items || []);
 
   const pesos = objetivos.map((o) => Number(o.peso ?? o.pesoBase ?? 0));
   const prog = objetivos.map((o) => Number(o.progreso ?? 0));
   const totalPeso = pesos.reduce((a, b) => a + b, 0) || 0;
 
-  const scoreObj =
-    totalPeso > 0
-      ? pesos.reduce((acc, p, i) => acc + p * (prog[i] || 0), 0) / totalPeso
-      : prog.length
-      ? prog.reduce((a, b) => a + b, 0) / prog.length
-      : 0;
+  const scoreObj = totalPeso > 0
+    ? pesos.reduce((acc, p, i) => acc + p * (prog[i] || 0), 0) / totalPeso
+    : prog.length ? prog.reduce((a, b) => a + b, 0) / prog.length : 0;
 
   const punt = aptitudes.map((a) => Number(a.puntuacion ?? a.score ?? 0));
-  const scoreApt = punt.length
-    ? punt.reduce((a, b) => a + b, 0) / punt.length
-    : 0;
+  const scoreApt = punt.length ? punt.reduce((a, b) => a + b, 0) / punt.length : 0;
 
   const global = (scoreObj + scoreApt) / 2;
 
@@ -107,12 +71,10 @@ function buildResumenEmpleado(data) {
   };
 }
 
-// - --- clave consistente para metas: nombre + unidad ---
 function metaKey(m = {}) {
   return `${m.nombre ?? ""}__${m.unidad ?? ""}`;
 }
 
-// --- deduplicador por nombre+unidad (ignora _id) ---
 function dedupeMetas(arr = []) {
   const seen = new Set();
   const out = [];
@@ -128,1541 +90,1080 @@ function dedupeMetas(arr = []) {
 
 function deepCloneMetas(metas = []) {
   const cloned = metas.map((m) => {
-    const esperado =
-      m.esperado ??
-      m.target ?? // por si viene como target desde la plantilla
-      m.meta ?? // fallback extra
-      null;
-
+    const esperado = m.esperado ?? m.target ?? m.meta ?? null;
     return {
       _id: m._id,
+      metaId: m.metaId || m._id,
       nombre: m.nombre,
       esperado,
       unidad: m.unidad,
       operador: m.operador || ">=",
-      modoAcumulacion:
-        m.modoAcumulacion || (m.acumulativa ? "acumulativo" : "periodo"),
-      acumulativa:
-        m.acumulativa ?? m.modoAcumulacion === "acumulativo",
+      modoAcumulacion: m.modoAcumulacion || (m.acumulativa ? "acumulativo" : "periodo"),
+      acumulativa: m.acumulativa ?? m.modoAcumulacion === "acumulativo",
       resultado: m.resultado ?? null,
-      cumple:
-        m.resultado != null && m.cumple != null ? !!m.cumple : false,
+      cumple: m.resultado != null && m.cumple != null ? !!m.cumple : false,
       peso: m.peso ?? m.pesoBase ?? null,
+      reconoceEsfuerzo: m.reconoceEsfuerzo,
+      permiteOver: m.permiteOver,
+      tolerancia: m.tolerancia,
+      reglaCierre: m.reglaCierre
     };
   });
-
   return dedupeMetas(cloned);
-}
-
-function parsePeriodoToDate(periodoStr) {
-  if (!periodoStr || typeof periodoStr !== "string") return null;
-  // soporta "2025M10" o "2025Q1" o "2025-10"
-  const mMatch = periodoStr.match(/^(\d{4})M(\d{1,2})$/i);
-  if (mMatch) {
-    const y = Number(mMatch[1]);
-    const m = Number(mMatch[2]) - 1;
-    return new Date(y, m, 28);
-  }
-  const qMatch = periodoStr.match(/^(\d{4})Q([1-4])$/i);
-  if (qMatch) {
-    const y = Number(qMatch[1]);
-    const q = Number(qMatch[2]) - 1; // 0..3
-    const m = q * 3 + 2; // fin de trimestre aprox
-    return new Date(y, m, 28);
-  }
-  const yMatch = periodoStr.match(/^(\d{4})$/);
-  if (yMatch) {
-    const y = Number(yMatch[1]);
-    return new Date(y, 11, 31);
-  }
-  const d = new Date(periodoStr);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function getFechaReferencia(item, hito) {
-  if (hito?.fecha) {
-    const d = new Date(hito.fecha);
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-  if (item?.fechaLimite) {
-    const d = new Date(item.fechaLimite);
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-  const per = hito?.periodo || item?.periodo || null;
-  if (per) return parsePeriodoToDate(per);
-  return null;
-}
-
-/** Estado híbrido igual que el Gantt */
-function getHybridStatus(sourceData, fechaRef) {
-  const dbStatus = sourceData?.estado;
-
-  // Si hay estado real (PENDING_EMPLOYEE, PENDING_HR, CLOSED, etc.) lo respetamos.
-  if (dbStatus && dbStatus !== "MANAGER_DRAFT") return dbStatus;
-
-  if (!fechaRef) return "pendiente";
-
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-
-  const ref = new Date(fechaRef);
-  ref.setHours(23, 59, 59, 999);
-
-  const diffMs = ref - hoy;
-  const diffDays = Math.ceil(diffMs / MS_PER_DAY);
-
-  if (diffDays < 0) return "vencido";
-  if (diffDays <= 7) return "por_vencer";
-  return "pendiente";
-}
-
-/**
- * Ahora devolvemos directamente el statusKey:
- * - "vencido" / "por_vencer" / "pendiente"
- * - "PENDING_EMPLOYEE" / "PENDING_HR" / "CLOSED" / otros estados reales
- */
-function classifyBucket(fecha, sourceData) {
-  const statusKey = getHybridStatus(sourceData || {}, fecha);
-  return statusKey;
 }
 
 function bucketConfig(bucket) {
   switch (bucket) {
-    case "por_vencer":
-      return {
-        label: "Por vencer (7 días)",
-        chip: "🔥 Por vencer",
-        badgeClass: "bg-amber-100 text-amber-800 ring-amber-200",
-        canEdit: true,
-      };
-    case "vencido":
-      return {
-        label: "Vencidos",
-        chip: "⚠ Vencido",
-        badgeClass: "bg-rose-100 text-rose-800 ring-rose-200",
-        canEdit: true,
-      };
-    case "PENDING_EMPLOYEE":
-      return {
-        label: "Enviado al Empleado",
-        chip: "📨 Enviado",
-        badgeClass: "bg-cyan-100 text-cyan-800 ring-cyan-200",
-        canEdit: false,
-      };
-    case "PENDING_HR":
-      return {
-        label: "En RRHH",
-        chip: "🏢 En RRHH",
-        badgeClass: "bg-blue-100 text-blue-800 ring-blue-200",
-        canEdit: false,
-      };
-    case "CLOSED":
-      return {
-        label: "Cerrado",
-        chip: "✅ Cerrado",
-        badgeClass: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-        canEdit: false,
-      };
-    case "pendiente":
-    default:
-      return {
-        label: "Pendientes (futuros)",
-        chip: "⏳ Futuro",
-        badgeClass: "bg-slate-100 text-slate-700 ring-slate-200",
-        canEdit: false,
-      };
+    case "por_vencer": return { label: "Por vencer", chip: "🔥 Por vencer", badgeClass: "bg-amber-100 text-amber-800", canEdit: true };
+    case "vencido": return { label: "Vencidos", chip: "⚠ Vencido", badgeClass: "bg-rose-100 text-rose-800", canEdit: true };
+    case "PENDING_EMPLOYEE": return { label: "Enviado", chip: "📨 Enviado", badgeClass: "bg-cyan-100 text-cyan-800", canEdit: false };
+    case "PENDING_HR": return { label: "En RRHH", chip: "🏢 En RRHH", badgeClass: "bg-blue-100 text-blue-800", canEdit: false };
+    case "CLOSED": return { label: "Cerrado", chip: "✅ Cerrado", badgeClass: "bg-emerald-100 text-emerald-800", canEdit: false };
+    default: return { label: "Futuro", chip: "⏳ Futuro", badgeClass: "bg-slate-100 text-slate-700", canEdit: false };
   }
 }
 
-const fotoSrc = (empleado) => {
-  const url = empleado?.fotoUrl;
-  if (!url) return null;
-  if (/^https?:\/\//i.test(url)) return url; // absoluta
-  const base =
-    typeof API_ORIGIN === "string" && API_ORIGIN
-      ? API_ORIGIN
-      : window.location.origin;
-  return `${base.replace(/\/+$/, "")}/${String(url).replace(/^\/+/, "")}`;
-};
+function getHitoStatus(hito) {
+  if (hito.actual !== null || hito.estado === "CERRADO") return "evaluado";
+  if (!hito.fecha) return "futuro";
+
+  const now = new Date();
+  const hitoDate = new Date(hito.fecha);
+  const diffTime = hitoDate - now;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return "vencido";
+  if (diffDays <= 15) return "por_vencer";
+  return "futuro";
+}
+
+function getHitoColorClass(status) {
+  switch (status) {
+    case "evaluado": return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "vencido": return "bg-rose-100 text-rose-800 border-rose-200";
+    case "por_vencer": return "bg-amber-100 text-amber-800 border-amber-200";
+    default: return "bg-blue-50 text-blue-700 border-blue-200";
+  }
+}
 
 /* ===================== Componente principal ===================== */
 
+function getAccumulatedValue(obj, metaId, currentPeriod, currentValue) {
+  if (!obj || !Array.isArray(obj.hitos)) return currentValue || 0;
+
+  const periodOrder = ["Q1", "Q2", "Q3", "FINAL"];
+  const currentIdx = periodOrder.indexOf(currentPeriod);
+  if (currentIdx === -1) return currentValue || 0;
+
+  let total = 0;
+  for (const h of obj.hitos) {
+    const hIdx = periodOrder.indexOf(h.periodo);
+    if (hIdx !== -1 && hIdx <= currentIdx) {
+      const m = h.metas?.find(m => (m.metaId === metaId || m._id === metaId));
+      if (h.periodo === currentPeriod) {
+        total += Number(currentValue || 0);
+      } else if (m) {
+        total += Number(m.resultado || 0);
+      }
+    }
+  }
+  return total;
+}
+
+/* ===================== Componente Principal ===================== */
 export default function EvaluacionFlujo() {
   const { plantillaId, periodo, empleadoId } = useParams();
   const { state } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // ===== Roles y acceso =====
-  const esReferente = Boolean(
-    (Array.isArray(user?.referenteAreas) && user.referenteAreas.length > 0) ||
-      (Array.isArray(user?.referenteSectors) && user.referenteSectors.length > 0)
-  );
+  // Roles
+  const esReferente = Boolean((Array.isArray(user?.referenteAreas) && user.referenteAreas.length > 0) || (Array.isArray(user?.referenteSectors) && user.referenteSectors.length > 0));
   const esDirector = user?.rol === "directivo" || user?.isRRHH === true;
   const esSuperAdmin = user?.rol === "superadmin";
   const esVisor = user?.rol === "visor";
   const puedeVer = esReferente || esDirector || esSuperAdmin || esVisor;
 
-  // ===== Año de trabajo =====
-  const [anio] = useState(
-    state?.anio ??
-      Number(String(periodo || new Date().getFullYear()).slice(0, 4))
-  );
+  const [anio] = useState(state?.anio ?? Number(String(periodo || new Date().getFullYear()).slice(0, 4)));
+  const [selectedEmpleadoId] = useState(empleadoId || state?.empleado?._id || state?.empleadosDelItem?.[0]?._id || user?.empleado?._id || null);
+  const [empleadoInfo, setEmpleadoInfo] = useState(state?.empleado || state?.empleadosDelItem?.[0] || user?.empleado || null);
 
-  // ===== Empleado en foco (sala de evaluación) =====
-  const [selectedEmpleadoId, setSelectedEmpleadoId] = useState(
-    empleadoId ||
-      state?.empleado?._id ||
-      state?.empleadosDelItem?.[0]?._id ||
-      user?.empleado?._id ||
-      null
-  );
-  const [empleadoInfo, setEmpleadoInfo] = useState(
-    state?.empleado || state?.empleadosDelItem?.[0] || user?.empleado || null
-  );
-
-  // ===== Evaluaciones del empleado (para acumulados) =====
-  const [evaluacionesEmpleado, setEvaluacionesEmpleado] = useState([]);
-
-  // ===== Ítem / hito actual =====
-  const [itemSeleccionado, setItemSeleccionado] = useState(
-    state?.itemSeleccionado ?? null
-  );
-  const [periodoActivo, setPeriodoActivo] = useState(
-    state?.hito?.periodo || periodo || null
-  );
-  const [localHito, setLocalHito] = useState(
-    state?.hito
-      ? {
-          periodo: state.hito.periodo,
-          fecha: state.hito.fecha,
-          metas: deepCloneMetas(state.hito.metas ?? []),
-          estado: state.hito.estado ?? "MANAGER_DRAFT",
-          actual: state.hito.actual ?? null,
-          comentario: state.hito.comentario ?? "",
-          escala: state.hito.escala ?? null,
-        }
-      : null
-  );
-  const [comentarioManager, setComentarioManager] = useState(
-    state?.hito?.comentarioManager ?? ""
-  );
-  const [saving, setSaving] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  // ===== Dashboard / mapa del empleado =====
   const [dashEmpleadoData, setDashEmpleadoData] = useState(null);
   const [loadingDash, setLoadingDash] = useState(false);
 
-  // filtros del mapa
-  const [tipoMapaFiltro, setTipoMapaFiltro] = useState("todos"); // todos | objetivo | aptitud
-  const [bucketFiltro, setBucketFiltro] = useState("todos"); // pendiente | por_vencer | vencido | todos
-  const [searchMapa, setSearchMapa] = useState("");
+  // Tabs
+  const [activeTab, setActiveTab] = useState(plantillaId === "feedback-global" ? "feedback" : "evaluacion"); // "evaluacion" | "feedback"
 
-  // ===== Flags de evaluación =====
-  const isAptitud =
-    itemSeleccionado?._tipo === "aptitud" ||
-    itemSeleccionado?.tipo === "aptitud";
-  const scaleToPercent = (v) => (v ? v * 20 : null);
+  // Estado local para items expandidos y sus datos de evaluación
+  const [expandedItems, setExpandedItems] = useState({}); // { [itemId]: boolean }
+  const [evaluacionData, setEvaluacionData] = useState({}); // { [itemId]: { localHito: ..., comentarioManager: ... } }
+  const [savingItems, setSavingItems] = useState({}); // { [itemId]: boolean }
 
-  // editable: solo MANAGER_DRAFT + ventana temporal (no futuros lejanos)
-  const fechaEvalRef = useMemo(() => {
-    if (!itemSeleccionado && !localHito) return null;
+  // Estado para expandir detalles de feedback
+  const [expandedFeedback, setExpandedFeedback] = useState({}); // { [periodo]: boolean }
 
-    // Si el hito local ya tiene fecha, priorizamos esa
-    if (localHito?.fecha) {
-      const d = new Date(localHito.fecha);
-      return Number.isNaN(d.getTime()) ? null : d;
-    }
-
-    return getFechaReferencia(itemSeleccionado, localHito);
-  }, [itemSeleccionado, localHito]);
-
-  const bucketActual = useMemo(() => {
-    if (!fechaEvalRef && !localHito) return "pendiente";
-    return classifyBucket(fechaEvalRef, localHito);
-  }, [fechaEvalRef, localHito]);
-
-  const bucketCfg = bucketConfig(bucketActual);
-  const editableTemporal = bucketCfg.canEdit;
-  const editable =
-    editableTemporal &&
-    (localHito?.estado === "MANAGER_DRAFT" || !localHito?.estado);
-
-  /* ===================== builders / loaders ===================== */
-
-  function buildBlankLocalHito(basePlantilla, periodoStr) {
-    const baseMetas = Array.isArray(basePlantilla?.metas)
-      ? basePlantilla.metas
-      : [];
-    return {
-      periodo: periodoStr,
-      fecha: null,
-      estado: "MANAGER_DRAFT",
-      metas: dedupeMetas(
-        deepCloneMetas(baseMetas).map((m) => ({
-          ...m,
-          resultado: null,
-          cumple: false,
-        }))
-      ),
-      actual: null,
-      comentario: "",
-      escala: null,
-    };
-  }
-
-  async function ensurePlantillaWithMetas(plantillaBase) {
-    if (
-      plantillaBase &&
-      Array.isArray(plantillaBase.metas) &&
-      plantillaBase.metas.length > 0
-    ) {
-      return plantillaBase;
-    }
-
-    try {
-      const full = await api(`/templates/${plantillaBase._id}`);
-      return full || plantillaBase;
-    } catch (e) {
-      console.error("No se pudieron cargar las metas de la plantilla", e);
-      return plantillaBase;
-    }
-  }
-
-function buildMetasForEvaluacion(plantillaBase, ev) {
-  const baseMetas = Array.isArray(plantillaBase?.metas)
-    ? plantillaBase.metas
-    : [];
-  const resultados = Array.isArray(ev?.metasResultados)
-    ? ev.metasResultados
-    : [];
-
-  if (!baseMetas.length && !resultados.length) return [];
-
-  const map = new Map();
-
-  // 1) definición de plantilla
-  baseMetas.forEach((m) => {
-    const key = metaKey(m);
-    map.set(key, { ...m });
-  });
-
-  // 2) resultados guardados pisan solo resultado/cumple/etc,
-  //    pero NO pierden esperado / modoAcumulacion de la plantilla
-  resultados.forEach((r) => {
-    const key = metaKey(r);
-    const base = map.get(key) || {};
-    map.set(key, {
-      ...base,
-      ...r,
-      // nos aseguramos de no perder esperado ni acumulativa
-      esperado: r.esperado ?? base.esperado ?? null,
-      modoAcumulacion:
-        r.modoAcumulacion ?? base.modoAcumulacion ?? (base.acumulativa ? "acumulativo" : "periodo"),
-      acumulativa:
-        r.acumulativa ?? base.acumulativa ?? (base.modoAcumulacion === "acumulativo"),
-    });
-  });
-
-  return deepCloneMetas(Array.from(map.values()));
-}
-
-  const hydrateFromEvaluacion = (plantillaBase, periodoSel, ev) => {
-    if (!plantillaBase) return;
-
-    const metas = buildMetasForEvaluacion(plantillaBase, ev);
-
-    setLocalHito({
-      periodo: periodoSel,
-      fecha: ev?.fecha ?? null,
-      estado: ev?.estado ?? "MANAGER_DRAFT",
-      metas,
-      actual:
-        ev?.actual ??
-        (metas.length ? calcularResultadoGlobal(metas) : null),
-      comentario: ev?.comentario ?? "",
-      escala: ev?.escala ?? null,
-    });
-
-    setComentarioManager(ev?.comentarioManager ?? "");
+  const toggleFeedbackDetail = (periodo) => {
+    setExpandedFeedback(prev => ({ ...prev, [periodo]: !prev[periodo] }));
   };
 
-  const loadEvaluacion = async (empleado, plantilla, periodoSel) => {
-    if (!empleado || !plantilla || !periodoSel) return;
-    try {
-      // aseguro metas de la plantilla
-      const plantillaFull = await ensurePlantillaWithMetas(plantilla);
+  const [loadingFeedbacks, setLoadingFeedbacks] = useState(false);
+  const [feedbacks, setFeedbacks] = useState([]);
 
-      const resp = await api(
-        `/evaluaciones?empleado=${empleado}&plantillaId=${plantilla._id}&periodo=${periodoSel}`
-      );
-      const arr = Array.isArray(resp) ? resp : resp?.items || [];
-      const ev = arr[0] || null;
+  // Periodo Global de Evaluación (por defecto el de la URL)
+  const [periodoGlobal, setPeriodoGlobal] = useState(periodo || null);
 
-      if (ev) {
-        hydrateFromEvaluacion(plantillaFull, periodoSel, ev);
-      } else {
-        setLocalHito(buildBlankLocalHito(plantillaFull, periodoSel));
-        setComentarioManager("");
-      }
-
-      // actualizo itemSeleccionado con metas completas
-      setItemSeleccionado((prev) =>
-        prev && String(prev._id) === String(plantilla._id)
-          ? { ...prev, metas: plantillaFull.metas }
-          : prev
-      );
-
-      setPeriodoActivo((prev) => prev || periodoSel);
-    } catch (e) {
-      console.error(e);
-      toast.error("No se pudo cargar la evaluación del período seleccionado.");
-    }
-  };
-
-  function resetToBlank(plantilla, periodoStr) {
-    setLocalHito(buildBlankLocalHito(plantilla, periodoStr));
-    setComentarioManager("");
-  }
-
-  /* ===================== efectos: empleado / dashboard / evaluaciones ===================== */
-
-  // Si no hay empleadoInfo, lo traigo
+  // Cargar info empleado
   useEffect(() => {
     (async () => {
       if (!selectedEmpleadoId || empleadoInfo) return;
       try {
         const emp = await api(`/empleados/${selectedEmpleadoId}`);
         setEmpleadoInfo(emp);
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     })();
   }, [selectedEmpleadoId, empleadoInfo]);
 
-  // Evaluaciones del empleado (todas, para acumulados)
+  // Cargar Dashboard
   useEffect(() => {
     (async () => {
-      if (!selectedEmpleadoId) {
-        setEvaluacionesEmpleado([]);
-        return;
-      }
-      try {
-        const resp = await api(
-          `/evaluaciones/empleado/${selectedEmpleadoId}?year=${anio}`
-        );
-        setEvaluacionesEmpleado(Array.isArray(resp) ? resp : []);
-      } catch (e) {
-        console.error("getEvaluacionesEmpleado error:", e);
-        setEvaluacionesEmpleado([]);
-      }
-    })();
-  }, [selectedEmpleadoId, anio]);
-
-  // Dashboard del empleado (objetivos/aptitudes del año)
-  useEffect(() => {
-    (async () => {
-      if (!selectedEmpleadoId) {
-        setDashEmpleadoData(null);
-        return;
-      }
+      if (!selectedEmpleadoId) return;
       try {
         setLoadingDash(true);
         const res = await dashEmpleado(selectedEmpleadoId, anio);
-        if (!res) {
-          setDashEmpleadoData(null);
-          return;
+        if (res) {
+          const normalized = { ...res };
+          if (normalized.objetivos?.items && !Array.isArray(normalized.objetivos)) normalized.objetivos = normalized.objetivos.items;
+          if (normalized.aptitudes?.items && !Array.isArray(normalized.aptitudes)) normalized.aptitudes = normalized.aptitudes.items;
+          setDashEmpleadoData(normalized);
         }
-        const normalized = { ...res };
-        if (
-          normalized.objetivos?.items &&
-          !Array.isArray(normalized.objetivos)
-        ) {
-          normalized.objetivos = normalized.objetivos.items;
-        }
-        if (
-          normalized.aptitudes?.items &&
-          !Array.isArray(normalized.aptitudes)
-        ) {
-          normalized.aptitudes = normalized.aptitudes.items;
-        }
-        setDashEmpleadoData(normalized);
       } catch (e) {
         console.error("dashEmpleado error:", e);
-        setDashEmpleadoData(null);
       } finally {
         setLoadingDash(false);
       }
     })();
   }, [selectedEmpleadoId, anio]);
 
-  // Cuando llega el dashboard y no hay itemSeleccionado, tomar el primero / el del state
+  // Cargar Feedbacks
   useEffect(() => {
-    if (!dashEmpleadoData || itemSeleccionado) return;
-
-    const objetivos = Array.isArray(dashEmpleadoData.objetivos)
-      ? dashEmpleadoData.objetivos
-      : [];
-    const aptitudes = Array.isArray(dashEmpleadoData.aptitudes)
-      ? dashEmpleadoData.aptitudes
-      : [];
-
-    const primerObjetivo = objetivos[0] || null;
-    const primerAptitud = aptitudes[0] || null;
-    const base =
-      state?.itemSeleccionado || primerObjetivo || primerAptitud || null;
-
-    if (base) {
-      const nuevoItem = {
-        ...base,
-        _tipo: base._tipo || (objetivos.includes(base) ? "objetivo" : "aptitud"),
-      };
-
-      setItemSeleccionado(nuevoItem);
-
-      const hitos = Array.isArray(base.hitos) ? base.hitos : [];
-      const p =
-        periodoActivo ||
-        state?.hito?.periodo ||
-        periodo ||
-        (hitos[0]?.periodo ?? null);
-
-      if (selectedEmpleadoId && p) {
-        loadEvaluacion(selectedEmpleadoId, nuevoItem, p);
-      } else {
-        setPeriodoActivo(p || null);
-        resetToBlank(nuevoItem, p || null);
+    (async () => {
+      if (!selectedEmpleadoId || activeTab !== "feedback") return;
+      try {
+        setLoadingFeedbacks(true);
+        const res = await api(`/feedbacks/empleado/${selectedEmpleadoId}?year=${anio}`);
+        setFeedbacks(res || []);
+      } catch (e) {
+        console.error("Error loading feedbacks", e);
+      } finally {
+        setLoadingFeedbacks(false);
       }
+    })();
+  }, [selectedEmpleadoId, anio, activeTab]);
+
+  // Helper para cargar evaluación de un item específico
+  const loadItemEvaluacion = async (item, p) => {
+    if (!selectedEmpleadoId || !item || !p) return;
+    try {
+      // 1. Traer plantilla full para asegurar metas
+      let plantillaFull = item;
+      if (!item.metas || item.metas.length === 0) {
+        try {
+          plantillaFull = await api(`/templates/${item._id}`);
+        } catch (e) { console.error("Error loading template full", e); }
+      }
+
+      // 2. Traer evaluación existente
+      const resp = await api(`/evaluaciones?empleado=${selectedEmpleadoId}&plantillaId=${item._id}&periodo=${p}`);
+      const arr = Array.isArray(resp) ? resp : resp?.items || [];
+      const ev = arr[0] || null;
+
+      // 3. Construir localHito
+      let localHito;
+      let comentarioManager = "";
+
+      if (ev) {
+        // Hydrate
+        const baseMetas = plantillaFull.metas || [];
+        const resultados = ev.metasResultados || [];
+
+        // Merge metas
+        const map = new Map();
+        baseMetas.forEach(m => map.set(metaKey(m), { ...m }));
+        resultados.forEach(r => {
+          const key = metaKey(r);
+          const base = map.get(key) || {};
+          map.set(key, { ...base, ...r, esperado: r.esperado ?? base.esperado, modoAcumulacion: r.modoAcumulacion ?? base.modoAcumulacion });
+        });
+        const metas = deepCloneMetas(Array.from(map.values()));
+
+        localHito = {
+          periodo: p,
+          fecha: ev.fecha,
+          estado: ev.estado,
+          metas,
+          actual: ev.actual ?? (metas.length ? calcularResultadoGlobal(metas) : null),
+          comentario: ev.comentario ?? "",
+          escala: ev.escala ?? null
+        };
+        comentarioManager = ev.comentarioManager ?? "";
+      } else {
+        // Blank
+        localHito = {
+          periodo: p,
+          fecha: null,
+          estado: "MANAGER_DRAFT",
+          metas: deepCloneMetas(plantillaFull.metas || []).map(m => ({ ...m, resultado: null, cumple: false })),
+          actual: null,
+          comentario: "",
+          escala: null
+        };
+      }
+
+      setEvaluacionData(prev => ({
+        ...prev,
+        [item._id]: { localHito, comentarioManager }
+      }));
+
+    } catch (e) {
+      console.error("Error loading item evaluation", e);
+      toast.error("Error al cargar datos del objetivo");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashEmpleadoData, itemSeleccionado]);
-
-  // Si cambia itemSeleccionado o periodoActivo, recargar evaluación (cuando corresponde)
-  useEffect(() => {
-    if (!selectedEmpleadoId || !itemSeleccionado) return;
-
-    const hitos = Array.isArray(itemSeleccionado.hitos)
-      ? itemSeleccionado.hitos
-      : [];
-    const periodoDefault =
-      periodoActivo ||
-      state?.hito?.periodo ||
-      periodo ||
-      (hitos[0]?.periodo ?? null);
-
-    if (!periodoDefault) return;
-
-    loadEvaluacion(selectedEmpleadoId, itemSeleccionado, periodoDefault);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEmpleadoId, itemSeleccionado?._id]);
-
-  // Recalcula “actual” cuando hay metas (objetivos)
-  useEffect(() => {
-    if (!localHito) return;
-    if (!isAptitud && localHito?.metas?.length) {
-      const global = calcularResultadoGlobal(localHito.metas);
-      setLocalHito((prev) => ({ ...prev, actual: global }));
-    }
-  }, [isAptitud, localHito?.metas]);
-
-  /* ===================== Helper: acumulado desde BD ===================== */
-
-  const getAcumuladoAnteriorForMeta = (meta, periodoActual) => {
-    if (!meta || !periodoActual || !itemSeleccionado) return 0;
-    if (!evaluacionesEmpleado.length) return 0;
-
-    const fechaActual = parsePeriodoToDate(periodoActual);
-    if (!fechaActual) return 0;
-
-    const plantillaId = itemSeleccionado._id;
-    const claveNombre = meta.nombre;
-    const claveUnidad = meta.unidad ?? null;
-
-    return evaluacionesEmpleado
-      .filter(
-        (ev) =>
-          String(ev.plantillaId) === String(plantillaId)
-      )
-      .filter((ev) => {
-        const f = parsePeriodoToDate(ev.periodo);
-        return f && f < fechaActual; // solo periodos anteriores
-      })
-      .reduce((sum, ev) => {
-        const metasEv = Array.isArray(ev.metasResultados)
-          ? ev.metasResultados
-          : [];
-        const found = metasEv.find(
-          (m) =>
-            m.nombre === claveNombre &&
-            (m.unidad ?? null) === claveUnidad
-        );
-        return (
-          sum +
-          (typeof found?.resultado === "number"
-            ? found.resultado
-            : 0)
-        );
-      }, 0);
   };
 
-  /* ===================== Mapa de evaluaciones (lado izquierdo) ===================== */
+  const toggleExpand = (item) => {
+    const isExpanded = !!expandedItems[item._id];
+    setExpandedItems(prev => ({ ...prev, [item._id]: !isExpanded }));
 
-  const mapaItems = useMemo(() => {
-    if (!dashEmpleadoData) return [];
+    if (!isExpanded && !evaluacionData[item._id]) {
+      const p = periodoGlobal || item.hitos?.[0]?.periodo;
+      if (p) loadItemEvaluacion(item, p);
+    }
+  };
 
-    const out = [];
-    const pushItems = (arr, tipo) => {
-      (arr || []).forEach((it) => {
-        const hitos = Array.isArray(it.hitos) ? it.hitos : [];
+  const handleUpdateLocalHito = (itemId, updater) => {
+    setEvaluacionData(prev => {
+      const current = prev[itemId];
+      if (!current) return prev;
+      const newLocalHito = typeof updater === 'function' ? updater(current.localHito) : updater;
 
-        // En lugar de buscar el hito del periodoActivo, buscamos el más urgente
-        let hitoMasUrgente = null;
-        let bucketMasUrgente = "pendiente";
-        const prioridades = {
-          vencido: 1,
-          por_vencer: 2,
-          PENDING_EMPLOYEE: 3,
-          PENDING_HR: 4,
-          CLOSED: 5,
-          pendiente: 6,
-        };
+      // Recalcular actual si es objetivo
+      let newActual = newLocalHito.actual;
+      if (newLocalHito.metas && newLocalHito.metas.length > 0) {
+        newActual = calcularResultadoGlobal(newLocalHito.metas);
+      }
 
-        // Recolectamos todos los buckets presentes en este item
-        const bucketsFound = new Set();
-        const hitosByBucket = {}; // bucket -> hito (el primero o más urgente de ese bucket)
-
-        hitos.forEach((h) => {
-          const fechaRef = getFechaReferencia(it, h);
-          const bucket = classifyBucket(fechaRef, h);
-          bucketsFound.add(bucket);
-
-          if (!hitosByBucket[bucket]) {
-            hitosByBucket[bucket] = h;
-          }
-
-          const prioridadActual = prioridades[bucket] || 99;
-          const prioridadMasUrgente = prioridades[bucketMasUrgente] || 99;
-
-          if (prioridadActual < prioridadMasUrgente) {
-            hitoMasUrgente = h;
-            bucketMasUrgente = bucket;
-          }
-        });
-
-        // Si no hay hitos, usar el primero o null
-        if (!hitoMasUrgente && hitos.length) {
-          hitoMasUrgente = hitos[0];
-          const fechaRef = getFechaReferencia(it, hitoMasUrgente);
-          bucketMasUrgente = classifyBucket(fechaRef, hitoMasUrgente);
-          bucketsFound.add(bucketMasUrgente);
-          hitosByBucket[bucketMasUrgente] = hitoMasUrgente;
+      return {
+        ...prev,
+        [itemId]: {
+          ...current,
+          localHito: { ...newLocalHito, actual: newActual }
         }
+      };
+    });
+  };
 
-        out.push({
-          _id: it._id,
-          _tipo: tipo,
-          nombre: it.nombre,
-          descripcion: it.descripcion,
-          peso: it.pesoBase ?? it.peso ?? null,
-          progreso: Number(
-            it.progreso ?? it.puntuacion ?? it.score ?? 0
-          ),
-          hitos,
-          hitoActual: hitoMasUrgente,
-          fechaRef: hitoMasUrgente
-            ? getFechaReferencia(it, hitoMasUrgente)
-            : null,
-          bucket: bucketMasUrgente,
-          buckets: Array.from(bucketsFound),
-          hitosByBucket,
-        });
-      });
-    };
+  const handleSaveItem = async (item, action = "draft") => {
+    const data = evaluacionData[item._id];
+    if (!data || !data.localHito) return;
 
-    pushItems(
-      Array.isArray(dashEmpleadoData.objetivos)
-        ? dashEmpleadoData.objetivos
-        : [],
-      "objetivo"
-    );
-    pushItems(
-      Array.isArray(dashEmpleadoData.aptitudes)
-        ? dashEmpleadoData.aptitudes
-        : [],
-      "aptitud"
-    );
-
-    return out;
-  }, [dashEmpleadoData]);
-
-  const itemsMapaFiltrados = useMemo(() => {
-    let items = [...mapaItems];
-
-    if (tipoMapaFiltro !== "todos") {
-      items = items.filter((i) => i._tipo === tipoMapaFiltro);
-    }
-
-    if (bucketFiltro !== "todos") {
-      // Filtrar si el item tiene ALGÚN hito con este bucket
-      items = items.filter((i) => i.buckets.includes(bucketFiltro));
-
-      // Ajustar la visualización para mostrar el hito correspondiente al filtro
-      items = items.map((i) => ({
-        ...i,
-        bucket: bucketFiltro, // Forzamos el bucket visual para que coincida con el filtro
-        hitoActual: i.hitosByBucket[bucketFiltro] || i.hitoActual,
-      }));
-    }
-
-    const t = searchMapa.trim().toLowerCase();
-    if (t) {
-      items = items.filter(
-        (i) =>
-          (i.nombre || "").toLowerCase().includes(t) ||
-          (i.descripcion || "").toLowerCase().includes(t)
-      );
-    }
-
-    items.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
-    return items;
-  }, [mapaItems, tipoMapaFiltro, bucketFiltro, searchMapa]);
-
-  /* ===================== Persistencia ===================== */
-
-  const persistAndFlow = async (action) => {
-    if (!itemSeleccionado || !localHito) return;
-
-    if (!selectedEmpleadoId) {
-      toast.error("Seleccioná un empleado.");
-      return;
-    }
-
-    // Bloqueo por ventana temporal
-    if (!editableTemporal) {
-      toast.error(
-        "Solo se pueden evaluar hitos por vencer (próximos 7 días) o vencidos."
-      );
-      return;
-    }
-
-    const periodoEval = periodoActivo || localHito.periodo;
-    if (!periodoEval) {
-      toast.error("Falta el período del hito a evaluar.");
-      return;
-    }
-
-    const isApt = isAptitud;
-    let actualToSend = 0;
+    const { localHito, comentarioManager } = data;
+    const periodoEval = localHito.periodo;
+    const isApt = item._tipo === "aptitud" || item.tipo === "aptitud";
 
     if (isApt) {
-      const escalaNum = Number(localHito?.escala ?? 0);
-      if (!escalaNum || escalaNum < 1 || escalaNum > 5) {
-        toast.error("Seleccioná una escala (1 a 5) antes de enviar.");
+      const escala = Number(localHito.escala);
+      if (!escala || escala < 1 || escala > 5) {
+        toast.error("Seleccioná una escala (1-5)");
         return;
       }
-      actualToSend = Number((escalaNum * 20).toFixed(1));
-    } else {
-      const raw = calcularResultadoGlobal(localHito.metas ?? []);
-      actualToSend = Number.isFinite(raw) ? Number(raw.toFixed(1)) : 0;
     }
 
-    setLocalHito((prev) => ({ ...prev, actual: actualToSend }));
-
     try {
-      setSaving(true);
+      setSavingItems(prev => ({ ...prev, [item._id]: true }));
+
+      const actualToSend = isApt ? (Number(localHito.escala) * 20) : (Number(localHito.actual) || 0);
 
       const body = {
         empleado: selectedEmpleadoId,
-        plantillaId: itemSeleccionado._id,
-        year: Number(String(periodoEval || "").slice(0, 4)),
+        plantillaId: item._id,
+        year: Number(String(periodoEval).slice(0, 4)),
         periodo: periodoEval,
         actual: actualToSend,
-        comentario: localHito.comentario ?? "",
-        comentarioManager: comentarioManager ?? "",
-        ...(isApt
-          ? { escala: Number(localHito?.escala ?? 0), metasResultados: [] }
-          : {
-              metasResultados: Array.isArray(localHito.metas)
-                ? dedupeMetas(localHito.metas)
-                : [],
-            }),
-        estado: "MANAGER_DRAFT",
+        comentario: localHito.comentario,
+        comentarioManager: comentarioManager,
+        ...(isApt ? { escala: Number(localHito.escala), metasResultados: [] } : { metasResultados: dedupeMetas(localHito.metas) }),
+        estado: "MANAGER_DRAFT"
       };
 
-      // upsert simple
       await api("/evaluaciones", { method: "POST", body });
-      await api(
-        `/evaluaciones/${selectedEmpleadoId}/${itemSeleccionado._id}/${periodoEval}`,
-        { method: "PUT", body }
-      );
+      await api(`/evaluaciones/${selectedEmpleadoId}/${item._id}/${periodoEval}`, { method: "PUT", body });
 
       if (action === "toEmployee") {
-        const evals = await api(
-          `/evaluaciones?plantillaId=${itemSeleccionado._id}&periodo=${periodoEval}`
-        );
-        const target = (Array.isArray(evals) ? evals : evals?.items || []).find(
-          (e) => String(e.empleado) === String(selectedEmpleadoId)
-        );
+        const evals = await api(`/evaluaciones?plantillaId=${item._id}&periodo=${periodoEval}&empleado=${selectedEmpleadoId}`);
+        const target = Array.isArray(evals) ? evals[0] : evals?.items?.[0];
         if (target) {
-          if (target.estado !== "MANAGER_DRAFT") {
-            await api(`/evaluaciones/${target._id}/reopen`, {
-              method: "POST",
-            });
-          }
-          await api(`/evaluaciones/${target._id}/submit-to-employee`, {
-            method: "POST",
-          });
+          await api(`/evaluaciones/${target._id}/submit-to-employee`, { method: "POST" });
+          toast.success("Enviado al colaborador");
         }
-        toast.success("Enviado al empleado");
-      } else if (action === "draft") {
+      } else {
         toast.success("Borrador guardado");
       }
+
+      const res = await dashEmpleado(selectedEmpleadoId, anio);
+      if (res) setDashEmpleadoData(res);
+
     } catch (e) {
       console.error(e);
-      const msg = e?.message || "Error procesando la evaluación";
-      toast.error(msg);
+      toast.error("Error al guardar");
     } finally {
-      setSaving(false);
+      setSavingItems(prev => ({ ...prev, [item._id]: false }));
     }
   };
 
-  /* ===================== Render helpers ===================== */
+  const handleRecalculate = async (item) => {
+    if (!confirm("¿Recalcular todas las evaluaciones de este objetivo con las reglas actuales?")) return;
+    try {
+      setSavingItems(prev => ({ ...prev, [item._id]: true }));
+      await api("/evaluaciones/recalculate", {
+        method: "POST",
+        body: {
+          plantillaId: item._id,
+          year: anio,
+          empleadoId: selectedEmpleadoId
+        }
+      });
+      toast.success("Reglas actualizadas y evaluaciones recalculadas");
 
-  const Chip = ({ children }) => (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-slate-200 bg-slate-50">
-      {children}
-    </span>
-  );
+      // Reload dashboard
+      const res = await dashEmpleado(selectedEmpleadoId, anio);
+      if (res) setDashEmpleadoData(res);
 
-  const resumenEmpleado = useMemo(
-    () => buildResumenEmpleado(dashEmpleadoData),
-    [dashEmpleadoData]
-  );
+      // Reload current item if open
+      if (evaluacionData[item._id]?.localHito) {
+        loadItemEvaluacion(item, evaluacionData[item._id].localHito.periodo);
+      }
 
-  const empleadoNombreCompleto = useMemo(() => {
-    const e = empleadoInfo;
-    if (!e) return "Colaborador";
-    return `${e.apellido || ""} ${e.nombre || ""}`.trim() || "Colaborador";
-  }, [empleadoInfo]);
+    } catch (e) {
+      console.error(e);
+      toast.error("Error al recalcular");
+    } finally {
+      setSavingItems(prev => ({ ...prev, [item._id]: false }));
+    }
+  };
 
-  const estadoLabel = useMemo(() => {
-    const code = localHito?.estado || "MANAGER_DRAFT";
-    if (code === "MANAGER_DRAFT") return "Borrador del jefe";
-    const found = ESTADOS.find((s) => s.code === code);
-    return found?.label || code;
-  }, [localHito?.estado]);
+  const handleSaveFeedback = async (periodo, comentario, estado) => {
+    try {
+      await api("/feedbacks", {
+        method: "POST",
+        body: {
+          empleado: selectedEmpleadoId,
+          year: anio,
+          periodo,
+          comentario,
+          estado
+        }
+      });
+      toast.success(`Feedback ${periodo} guardado`);
+      // Recargar
+      const res = await api(`/feedbacks/empleado/${selectedEmpleadoId}?year=${anio}`);
+      setFeedbacks(res || []);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message || "Error al guardar feedback");
+    }
+  };
 
-  if (!puedeVer) {
-    return (
-      <div className="container-app p-6">
-        <div className="max-w-3xl mx-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-200 p-6 text-center">
-          <h2 className="text-lg font-semibold mb-1">Acceso restringido</h2>
-          <p className="text-sm text-slate-600">
-            No tenés permisos para ver esta evaluación.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const handleFeedbackChange = (periodo, val) => {
+    setFeedbacks(prev => {
+      const idx = prev.findIndex(f => f.periodo === periodo);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], comentario: val };
+        return copy;
+      } else {
+        return [...prev, { periodo, comentario: val, estado: "PENDIENTE" }];
+      }
+    });
+  };
 
-  /* ===================== Render principal ===================== */
+  const calculatePeriodScore = (periodoStr) => {
+    if (!dashEmpleadoData) return 0;
+    if (periodoStr === "FINAL") return buildResumenEmpleado(dashEmpleadoData)?.global || 0;
+    return 0;
+  };
+
+  const resumenEmpleado = useMemo(() => buildResumenEmpleado(dashEmpleadoData), [dashEmpleadoData]);
+  const empleadoNombreCompleto = empleadoInfo ? `${empleadoInfo.apellido} ${empleadoInfo.nombre}` : "Colaborador";
 
   return (
-    <div className="bg-slate-50 min-h-screen">
-      {/* Header sticky */}
-      <div className="sticky top-0 z-10 border-b bg-white/90 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                if (window.history.length > 1) navigate(-1);
-                else navigate("/seguimiento");
-              }}
-              className="text-xs px-3 py-1.5 rounded-full border border-slate-200 hover:bg-slate-50"
-            >
-              ← Volver
-            </button>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">
-                Sala de evaluación
-              </div>
-              <h1 className="text-lg font-semibold flex items-center gap-2">
-                {empleadoNombreCompleto}
-                <span className="text-xs font-normal text-slate-500">
-                  · Año {anio}
-                </span>
-              </h1>
-              {itemSeleccionado && (
-                <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-slate-500">
-                  <Chip>{isAptitud ? "💡 Aptitud" : "🎯 Objetivo"}</Chip>
-                  {periodoActivo && <Chip>Periodo: {periodoActivo}</Chip>}
-                  <Chip>Estado: {estadoLabel}</Chip>
-                  <Chip>{bucketCfg.chip}</Chip>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {resumenEmpleado && (
-            <div className="hidden sm:flex flex-col items-end gap-1">
-              <div className="text-[11px] text-slate-500">
-                Global referencial
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-indigo-700">
-                  {Math.round(resumenEmpleado.global)}%
-                </span>
-                <span className="text-xs text-slate-500">año actual</span>
-              </div>
-              <div className="w-40">
-                <ProgressBar value={resumenEmpleado.global} />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* GRID principal */}
-      <div className="max-w-[1600px] mx-auto px-4 py-6 grid grid-cols-1 xl:grid-cols-[350px_1fr_320px] gap-6">
-        {/* IZQUIERDA: Sidebar (Ficha + Mapa) */}
-        <div className="space-y-6 h-fit sticky top-24">
-          {/* Ficha colaborador */}
-          <div className="rounded-2xl border bg-white p-4 shadow-sm flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              {fotoSrc(empleadoInfo) ? (
-                <img
-                  src={fotoSrc(empleadoInfo)}
-                  alt={empleadoNombreCompleto}
-                  className="h-14 w-14 rounded-full object-cover ring-2 ring-indigo-100"
-                />
-              ) : (
-                <div className="h-14 w-14 rounded-full bg-indigo-100 flex items-center justify-center ring-2 ring-indigo-200">
-                  <UserCircle2 className="h-8 w-8 text-indigo-500" />
-                </div>
-              )}
+    <div className="bg-slate-50 min-h-screen pb-20">
+      {/* HEADER */}
+      <div className="bg-slate-950 text-white sticky top-0 z-20 shadow-xl border-b border-slate-800">
+        <div className="max-w-[1600px] mx-auto px-6 py-4">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="text-slate-400 hover:text-white hover:bg-white/10">
+                ← Volver
+              </Button>
               <div>
-                <div className="text-xs uppercase tracking-wide text-slate-500">
-                  Colaborador
-                </div>
-                <div className="text-sm font-semibold">
+                <h1 className="text-xl font-bold flex items-center gap-2">
                   {empleadoNombreCompleto}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  {empleadoInfo?.puesto || "Sin puesto definido"}
-                </div>
+                  <Badge variant="outline" className="text-slate-400 border-slate-700 font-normal">
+                    {anio}
+                  </Badge>
+                </h1>
+                <p className="text-xs text-slate-400">Sala de Evaluación</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 mt-1">
-              <div className="rounded-lg bg-slate-50 border px-3 py-2">
-                <div className="text-[10px] uppercase text-slate-400">Área</div>
-                <div className="font-medium text-xs">
-                  {empleadoInfo?.area?.nombre || "—"}
-                </div>
-              </div>
-              <div className="rounded-lg bg-slate-50 border px-3 py-2">
-                <div className="text-[10px] uppercase text-slate-400">
-                  Sector
-                </div>
-                <div className="font-medium text-xs">
-                  {empleadoInfo?.sector?.nombre || "—"}
-                </div>
-              </div>
-              {empleadoInfo?.legajo && (
-                <div className="rounded-lg bg-slate-50 border px-3 py-2">
-                  <div className="text-[10px] uppercase text-slate-400">
-                    Legajo
-                  </div>
-                  <div className="font-medium text-xs">
-                    {empleadoInfo.legajo}
-                  </div>
-                </div>
-              )}
-              {empleadoInfo?.email && (
-                <div className="rounded-lg bg-slate-50 border px-3 py-2">
-                  <div className="text-[10px] uppercase text-slate-400">
-                    Email
-                  </div>
-                  <div className="font-medium text-[11px] truncate">
-                    {empleadoInfo.email}
-                  </div>
-                </div>
-              )}
+            {/* TABS NAVIGATION */}
+            <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+              <button
+                onClick={() => setActiveTab("evaluacion")}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "evaluacion" ? "bg-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
+              >
+                <BarChart3 className="w-4 h-4 inline-block mr-2" />
+                Evaluación de Objetivos
+              </button>
+              <button
+                onClick={() => setActiveTab("feedback")}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "feedback" ? "bg-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
+              >
+                <MessageSquare className="w-4 h-4 inline-block mr-2" />
+                Feedback Trimestral
+              </button>
             </div>
 
+            {/* Global Score */}
             {resumenEmpleado && (
-              <div className="mt-2 rounded-xl border bg-slate-50 px-3 py-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-500">
-                    Resultado global (referencial)
-                  </span>
-                  <span className="text-sm font-semibold">
-                    {Math.round(resumenEmpleado.global)}%
-                  </span>
+              <div className="hidden xl:flex items-center gap-8 bg-white/5 p-2 px-6 rounded-lg border border-white/10">
+                <div className="text-center">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider">Objetivos</div>
+                  <div className="text-2xl font-bold text-blue-400">{Math.round(resumenEmpleado.objetivos.score)}%</div>
                 </div>
-                <ProgressBar value={resumenEmpleado.global} />
-
-                <div className="grid grid-cols-2 gap-2 mt-2 text-[11px]">
-                  <div>
-                    <div className="text-slate-500 mb-0.5">
-                      🎯 Objetivos ({resumenEmpleado.objetivos.cantidad})
-                    </div>
-                    <div className="font-semibold">
-                      {Math.round(resumenEmpleado.objetivos.score)}%
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500 mb-0.5">
-                      💡 Aptitudes ({resumenEmpleado.aptitudes.cantidad})
-                    </div>
-                    <div className="font-semibold">
-                      {Math.round(resumenEmpleado.aptitudes.score)}%
-                    </div>
-                  </div>
+                <div className="text-center">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider">Competencias</div>
+                  <div className="text-2xl font-bold text-amber-400">{Math.round(resumenEmpleado.aptitudes.score)}%</div>
+                </div>
+                <div className="h-8 w-px bg-slate-700"></div>
+                <div className="text-center">
+                  <div className="text-[10px] text-emerald-400 uppercase tracking-wider font-semibold">Global</div>
+                  <div className="text-3xl font-black text-emerald-400">{Math.round(resumenEmpleado.global)}%</div>
                 </div>
               </div>
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Mapa de evaluaciones (Movido al sidebar) */}
-          <div className="rounded-2xl border bg-white p-4 shadow-sm flex flex-col max-h-[60vh]">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div>
-                <h3 className="text-sm font-semibold">Mapa de evaluaciones</h3>
-                <p className="text-[11px] text-slate-500">
-                  Objetivos y aptitudes del año.
-                </p>
-              </div>
-              {loadingDash && (
-                <span className="text-[11px] text-slate-500">Cargando…</span>
-              )}
-            </div>
+      {/* MAIN CONTENT */}
+      <div className="max-w-[1600px] mx-auto px-6 py-8">
 
-            {/* Filtros */}
-            <div className="flex flex-col gap-3 mb-3">
-              {/* Filtro por tipo */}
-              <div>
-                <p className="text-[11px] font-medium text-slate-500 mb-1">
-                  Filtrar por tipo
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {[
-                    { k: "todos", lbl: "Todos" },
-                    { k: "objetivo", lbl: "Objetivos" },
-                    { k: "aptitud", lbl: "Aptitudes" },
-                  ].map((b) => (
-                    <button
-                      key={b.k}
-                      className={`px-2 py-1 rounded-md text-[11px] border ${
-                        tipoMapaFiltro === b.k
-                          ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-medium"
-                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
-                      onClick={() => setTipoMapaFiltro(b.k)}
-                    >
-                      {b.lbl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Filtro por estado */}
-              <div>
-                <p className="text-[11px] font-medium text-slate-500 mb-1">
-                  Filtrar por estado
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {[
-                    { k: "todos", lbl: "Todos" },
-                    { k: "por_vencer", lbl: "Por vencer" },
-                    { k: "vencido", lbl: "Vencidos" },
-                    { k: "pendiente", lbl: "Pendientes" },
-                    { k: "PENDING_EMPLOYEE", lbl: "Enviados" },
-                    { k: "PENDING_HR", lbl: "En RRHH" },
-                    { k: "CLOSED", lbl: "Cerrados" },
-                  ].map((b) => (
-                    <button
-                      key={b.k}
-                      className={`px-2 py-1 rounded-md text-[11px] border ${
-                        bucketFiltro === b.k
-                          ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-medium"
-                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
-                      onClick={() => setBucketFiltro(b.k)}
-                    >
-                      {b.lbl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Lista con scroll limitado */}
-            <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-              {itemsMapaFiltrados.length === 0 && (
-                <p className="text-xs text-slate-500 py-6 text-center">
-                  No hay elementos.
-                </p>
-              )}
-
-              {itemsMapaFiltrados.map((it) => {
-                const selected =
-                  itemSeleccionado &&
-                  String(itemSeleccionado._id) === String(it._id);
-                const cfg = bucketConfig(it.bucket);
-                const progreso = Math.round(it.progreso || 0);
-
-                const handleClick = () => {
-                  const nuevoItem = {
-                    ...it,
-                    _tipo: it._tipo,
-                  };
-                  setItemSeleccionado(nuevoItem);
-
-                  const hitos = Array.isArray(it.hitos) ? it.hitos : [];
-                  const defaultPeriodo =
-                    it.hitoActual?.periodo ||
-                    hitos[0]?.periodo ||
-                    periodoActivo ||
-                    periodo;
-
-                  if (defaultPeriodo) {
-                    setPeriodoActivo(defaultPeriodo);
-                    if (selectedEmpleadoId) {
-                      loadEvaluacion(
-                        selectedEmpleadoId,
-                        nuevoItem,
-                        defaultPeriodo
-                      );
-                    }
-                  } else {
-                    setPeriodoActivo(null);
-                    resetToBlank(nuevoItem, null);
-                  }
-                };
+        {/* TAB: EVALUACION */}
+        {activeTab === "evaluacion" && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in duration-300">
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold flex items-center gap-2 text-blue-700 border-b pb-2">
+                <Target className="w-5 h-5" /> Objetivos
+              </h2>
+              {dashEmpleadoData?.objetivos?.map((obj) => {
+                const isExpanded = !!expandedItems[obj._id];
+                const data = evaluacionData[obj._id];
+                const localHito = data?.localHito;
+                const bucketCfg = bucketConfig(obj.bucket || "futuro");
 
                 return (
-                  <button
-                    key={it._id}
-                    onClick={handleClick}
-                    className={`w-full text-left rounded-xl border px-3 py-2.5 text-xs transition shadow-sm ${
-                      selected
-                        ? "bg-indigo-50 border-indigo-200 shadow-md ring-1 ring-indigo-200"
-                        : "bg-slate-50 hover:bg-white"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 w-full">
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <span className="text-[10px] uppercase text-slate-400 font-semibold">
-                            {it._tipo === "objetivo" ? "Objetivo" : "Aptitud"}
-                          </span>
-                          <span
-                            className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full ring-1 ${cfg.badgeClass}`}
-                          >
-                            {cfg.chip}
-                          </span>
-                        </div>
-                        <div className="font-semibold text-slate-900 text-[13px] line-clamp-2 leading-snug">
-                          {it.nombre}
-                        </div>
-
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="flex-1">
-                            <ProgressBar value={progreso} />
+                  <Card key={obj._id} className={`border-l-4 ${bucketCfg.badgeClass.replace("bg-", "border-l-").split(" ")[0]} shadow-sm transition-all ${isExpanded ? 'ring-2 ring-blue-100' : ''}`}>
+                    <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => toggleExpand(obj)}>
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className={`${bucketCfg.badgeClass} border-transparent font-normal`}>
+                              {bucketCfg.chip}
+                            </Badge>
+                            <span className="text-xs text-slate-400 font-medium">Peso: {obj.peso}%</span>
                           </div>
-                          <span className="text-[11px] text-slate-600 min-w-[30px] text-right font-medium">
-                            {progreso}%
-                          </span>
+                          <CardTitle className="text-base font-bold text-slate-800 leading-tight">
+                            {obj.nombre}
+                          </CardTitle>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-black text-slate-700">{Math.round(obj.progreso)}%</div>
+                          <div className="text-[10px] text-slate-400 uppercase font-bold">Progreso</div>
                         </div>
                       </div>
-                    </div>
-                  </button>
+                    </CardHeader>
+
+                    {isExpanded && (
+                      <CardContent className="pt-0 pb-6 px-6 bg-slate-50/30 border-t">
+                        {/* Milestone Selector */}
+                        {obj.hitos && obj.hitos.length > 0 && (
+                          <div className="mb-6 mt-4">
+                            <label className="text-xs font-semibold text-slate-400 uppercase mb-2 block">Cronograma de Hitos</label>
+                            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                              {obj.hitos.map((h) => {
+                                const status = getHitoStatus(h);
+                                const colorClass = getHitoColorClass(status);
+                                const isSelected = localHito?.periodo === h.periodo;
+                                const isSelectable = status === "vencido" || status === "por_vencer" || status === "evaluado";
+
+                                return (
+                                  <div
+                                    key={h.periodo}
+                                    onClick={() => isSelectable && loadItemEvaluacion(obj, h.periodo)}
+                                    className={`flex flex-col items-center justify-center p-2 rounded border ${colorClass} transition-all ${isSelected ? 'ring-2 ring-offset-1 ring-slate-400' : ''} ${isSelectable ? 'cursor-pointer hover:brightness-95' : 'opacity-60 cursor-not-allowed'}`}
+                                  >
+                                    <span className="text-[10px] font-bold uppercase">{h.periodo}</span>
+                                    <span className="text-xs font-semibold">{h.actual !== null ? `${Math.round(h.actual)}%` : "-"}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {localHito ? (
+                          <div className="space-y-6 mt-4 animate-in slide-in-from-top-2 duration-200">
+                            <div className="flex items-center justify-between bg-white p-3 rounded-lg border shadow-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-600">Evaluando Período:</span>
+                                <Badge className="bg-slate-900 text-white hover:bg-slate-800">{localHito.periodo}</Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-600">Score Hito:</span>
+                                <span className="text-lg font-bold text-emerald-600">{Number(localHito.actual).toFixed(1)}%</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              {localHito.metas.map((meta, idx) => {
+                                const isAcumulativo = meta.modoAcumulacion === "acumulativo";
+                                const valorEvaluado = isAcumulativo
+                                  ? getAccumulatedValue(obj, meta.metaId || meta._id, localHito.periodo, meta.resultado)
+                                  : meta.resultado;
+
+                                const cumple = evaluarCumple(valorEvaluado, meta.esperado, meta.operador, meta.unidad);
+
+                                return (
+                                  <div key={idx} className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
+                                    <div className="flex justify-between items-start">
+                                      <div>
+                                        <div className="font-semibold text-sm text-slate-800">{meta.nombre}</div>
+                                        <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-2">
+                                          <span>Esperado: <b>{meta.operador} {meta.esperado} {meta.unidad}</b></span>
+                                          {isAcumulativo && <span className="text-purple-600 bg-purple-50 px-1.5 rounded border border-purple-100">Acumulativo</span>}
+                                          {meta.reglaCierre && <span className="text-indigo-600 bg-indigo-50 px-1.5 rounded border border-indigo-100">Cierre: {meta.reglaCierre}</span>}
+                                          {meta.reconoceEsfuerzo && <span className="text-blue-600 bg-blue-50 px-1.5 rounded border border-blue-100">Reconoce Esfuerzo</span>}
+                                          {meta.permiteOver && <span className="text-emerald-600 bg-emerald-50 px-1.5 rounded border border-emerald-100">Permite Over</span>}
+                                          {meta.tolerancia > 0 && <span className="text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-100">Tol: {meta.tolerancia}</span>}
+                                        </div>
+                                      </div>
+                                      <div className="w-32">
+                                        <label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Resultado</label>
+                                        {meta.unidad === "Cumple/No Cumple" ? (
+                                          <div className="flex items-center gap-2">
+                                            <input
+                                              type="checkbox"
+                                              className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                              checked={!!meta.resultado}
+                                              onChange={(e) => {
+                                                const val = e.target.checked;
+                                                handleUpdateLocalHito(obj._id, (prev) => {
+                                                  const metas = [...prev.metas];
+                                                  metas[idx] = { ...metas[idx], resultado: val, cumple: val };
+                                                  return { ...prev, metas };
+                                                });
+                                              }}
+                                            />
+                                            <span className="text-sm">{meta.resultado ? "Cumple" : "No Cumple"}</span>
+                                          </div>
+                                        ) : (
+                                          <Input
+                                            type="number"
+                                            className="h-8 text-sm font-medium"
+                                            placeholder="Valor..."
+                                            value={meta.resultado ?? ""}
+                                            onChange={(e) => {
+                                              const val = e.target.value === "" ? null : Number(e.target.value);
+                                              handleUpdateLocalHito(obj._id, (prev) => {
+                                                const metas = [...prev.metas];
+                                                metas[idx] = { ...metas[idx], resultado: val };
+                                                return { ...prev, metas };
+                                              });
+                                            }}
+                                          />
+                                        )}
+                                      </div>
+                                    </div>
+                                    {meta.resultado !== null && (
+                                      <div className="mt-2">
+                                        <div className={`text-xs font-medium ${cumple ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                          {cumple ? "✔ Cumple Objetivo" : (isAcumulativo ? `⚠ Progreso actual: ${valorEvaluado} / ${meta.esperado}` : "✘ No alcanza objetivo")}
+                                        </div>
+                                        {isAcumulativo && (
+                                          <div className="text-[10px] text-slate-500 mt-1">
+                                            Acumulado Total: <b>{valorEvaluado}</b> (Anteriores + Actual)
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Comentarios y Acciones */}
+                            <div className="bg-white p-4 rounded-lg border shadow-sm space-y-4">
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Comentario del Evaluador</label>
+                                <textarea
+                                  className="w-full h-24 rounded border-slate-200 p-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none resize-none"
+                                  placeholder="Justificación de la evaluación..."
+                                  value={localHito.comentario}
+                                  onChange={(e) => handleUpdateLocalHito(obj._id, (prev) => ({ ...prev, comentario: e.target.value }))}
+                                />
+                              </div>
+                              {data.comentarioManager && (
+                                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Feedback Anterior</label>
+                                  <p className="text-sm text-slate-600 italic">"{data.comentarioManager}"</p>
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between pt-2">
+                                <Button variant="outline" size="sm" onClick={() => handleRecalculate(obj)} disabled={savingItems[obj._id]}>
+                                  <RefreshCw className={`w-3 h-3 mr-2 ${savingItems[obj._id] ? "animate-spin" : ""}`} /> Recalcular
+                                </Button>
+                                <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSaveItem(obj, "draft")} disabled={savingItems[obj._id]}>
+                                  <Save className="w-4 h-4 mr-2" /> Guardar Avance
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 text-slate-400">
+                            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                            <p>Seleccioná un hito del cronograma para evaluar</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold flex items-center gap-2 text-amber-700 border-b pb-2">
+                <Lightbulb className="w-5 h-5" /> Competencias
+              </h2>
+              {dashEmpleadoData?.aptitudes?.map((apt) => {
+                const isExpanded = !!expandedItems[apt._id];
+                const data = evaluacionData[apt._id];
+                const localHito = data?.localHito;
+
+                return (
+                  <Card key={apt._id} className={`border-l-4 border-l-amber-500 shadow-sm transition-all ${isExpanded ? 'ring-2 ring-amber-100' : ''}`}>
+                    <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => toggleExpand(apt)}>
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <CardTitle className="text-base font-bold text-slate-800 leading-tight">
+                            {apt.nombre}
+                          </CardTitle>
+                          <p className="text-xs text-slate-500 line-clamp-2">{apt.descripcion}</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-black text-amber-600">{Math.round(apt.puntuacion)}%</div>
+                          <div className="text-[10px] text-slate-400 uppercase font-bold">Score</div>
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    {isExpanded && (
+                      <CardContent className="pt-0 pb-6 px-6 bg-slate-50/30 border-t">
+                        {/* Milestone Selector (Added for Competencias) */}
+                        {apt.hitos && apt.hitos.length > 0 && (
+                          <div className="mb-6 mt-4">
+                            <label className="text-xs font-semibold text-slate-400 uppercase mb-2 block">Cronograma de Hitos</label>
+                            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                              {apt.hitos.map((h) => {
+                                const status = getHitoStatus(h);
+                                const colorClass = getHitoColorClass(status);
+                                const isSelected = localHito?.periodo === h.periodo;
+                                const isSelectable = status === "vencido" || status === "por_vencer" || status === "evaluado";
+
+                                return (
+                                  <div
+                                    key={h.periodo}
+                                    onClick={() => isSelectable && loadItemEvaluacion(apt, h.periodo)}
+                                    className={`flex flex-col items-center justify-center p-2 rounded border ${colorClass} transition-all ${isSelected ? 'ring-2 ring-offset-1 ring-slate-400' : ''} ${isSelectable ? 'cursor-pointer hover:brightness-95' : 'opacity-60 cursor-not-allowed'}`}
+                                  >
+                                    <span className="text-[10px] font-bold uppercase">{h.periodo}</span>
+                                    <span className="text-xs font-semibold">{h.actual !== null ? `${Math.round(h.actual)}%` : "-"}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {localHito ? (
+                          <div className="space-y-6 mt-4 animate-in slide-in-from-top-2 duration-200">
+                            <div className="flex items-center justify-between bg-white p-3 rounded-lg border shadow-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-600">Evaluando Período:</span>
+                                <Badge className="bg-slate-900 text-white hover:bg-slate-800">{localHito.periodo}</Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-600">Nivel:</span>
+                                <Badge variant="outline" className="text-amber-700 border-amber-200 bg-amber-50">
+                                  {localHito.escala ? `${localHito.escala}/5` : "Sin calificar"}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg border shadow-sm space-y-6">
+                              <div>
+                                <label className="text-sm font-bold text-slate-700 mb-2 block">Nivel de Competencia (1-5)</label>
+                                <div className="flex gap-2">
+                                  {[1, 2, 3, 4, 5].map((val) => (
+                                    <button
+                                      key={val}
+                                      onClick={() => handleUpdateLocalHito(apt._id, (prev) => ({ ...prev, escala: val }))}
+                                      className={`flex-1 h-12 rounded-lg border-2 font-bold text-lg transition-all ${localHito.escala === val ? "border-amber-500 bg-amber-50 text-amber-700 scale-105 shadow-md" : "border-slate-100 bg-slate-50 text-slate-400 hover:border-amber-200"}`}
+                                    >
+                                      {val}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex justify-between text-xs text-slate-400 mt-2 px-1">
+                                  <span>Bajo Desempeño</span>
+                                  <span>Excelente Desempeño</span>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Comentario del Evaluador</label>
+                                <textarea
+                                  className="w-full h-24 rounded border-slate-200 p-2 text-sm focus:ring-2 focus:ring-amber-500/20 outline-none resize-none"
+                                  placeholder="Justificación de la competencia..."
+                                  value={localHito.comentario}
+                                  onChange={(e) => handleUpdateLocalHito(apt._id, (prev) => ({ ...prev, comentario: e.target.value }))}
+                                />
+                              </div>
+
+                              <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={() => handleSaveItem(apt, "draft")} disabled={savingItems[apt._id]}>
+                                <Save className="w-4 h-4 mr-2" /> Guardar Avance
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 text-slate-400">
+                            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                            <p>Seleccioná un hito del cronograma para evaluar</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    )}
+                  </Card>
                 );
               })}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* CENTRO: Evaluación actual */}
-        <div className="space-y-4">
-          {/* Detalle del ítem y período */}
-          {itemSeleccionado && (
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-slate-500 uppercase tracking-wide mb-1">
-                    Ítem a evaluar
-                  </div>
-                  <h2 className="text-base font-semibold leading-snug">
-                    {itemSeleccionado?.nombre}
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {itemSeleccionado?.descripcion || "Sin descripción"}
-                  </p>
-                </div>
+        {/* TAB: FEEDBACK */}
+        {activeTab === "feedback" && (
+          <div className="animate-in fade-in duration-300 space-y-8">
+            {/* TIMELINE */}
+            <div className="bg-gradient-to-br from-white to-slate-50 p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-500 opacity-20"></div>
+              <h3 className="text-sm font-bold text-slate-700 mb-8 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-blue-600" /> Cronograma de Feedback {anio}
+              </h3>
+              <div className="relative flex items-center justify-between px-4 md:px-12">
+                {/* Connecting Line */}
+                <div className="absolute left-0 right-0 top-3 h-0.5 bg-slate-200 -z-0 mx-8 md:mx-16"></div>
 
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-2">
-                    {(itemSeleccionado?.pesoBase != null ||
-                      itemSeleccionado?.peso != null) && (
-                      <div className="rounded-lg bg-slate-50 border px-3 py-2">
-                        <div className="text-[10px] text-slate-500">Peso</div>
-                        <div className="text-sm font-semibold">
-                          {itemSeleccionado?.pesoBase ??
-                            itemSeleccionado?.peso}
-                          %
-                        </div>
-                      </div>
-                    )}
-                    <div className="rounded-lg bg-slate-50 border px-3 py-2">
-                      <div className="text-[10px] text-slate-500">Estado</div>
-                      <div className="text-xs font-medium">{estadoLabel}</div>
-                    </div>
-                  </div>
-
-                  {/* Selector de período */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-500">Período</span>
-                    <select
-                      className="text-xs rounded-md border px-2 py-1 bg-slate-50"
-                      value={periodoActivo || ""}
-                      onChange={(e) => {
-                        const nuevoPeriodo = e.target.value || null;
-                        setPeriodoActivo(nuevoPeriodo);
-                        if (nuevoPeriodo && selectedEmpleadoId) {
-                          loadEvaluacion(
-                            selectedEmpleadoId,
-                            itemSeleccionado,
-                            nuevoPeriodo
-                          );
-                        } else if (itemSeleccionado) {
-                          resetToBlank(itemSeleccionado, nuevoPeriodo);
-                        }
-                      }}
-                    >
-                      {(itemSeleccionado?.hitos || []).map((h, idx) => (
-                        <option key={`${h.periodo}-${idx}`} value={h.periodo}>
-                          {h.periodo}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Comentarios */}
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <h3 className="font-medium mb-3 flex items-center gap-2">
-              📝 Comentarios
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">
-                  Comentario del período (historial interno)
-                </label>
-                <textarea
-                  className="w-full rounded-md border px-3 py-2 text-sm mt-1"
-                  value={localHito?.comentario ?? ""}
-                  disabled={!editable}
-                  onChange={(e) =>
-                    setLocalHito((p) => ({
-                      ...(p || {}),
-                      comentario: e.target.value,
-                    }))
-                  }
-                  rows={3}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">
-                  Comentario del manager (visible para el colaborador)
-                </label>
-                <textarea
-                  className="w-full rounded-md border px-3 py-2 text-sm mt-1"
-                  placeholder="Este comentario se verá al enviar al empleado / RRHH"
-                  value={comentarioManager ?? ""}
-                  onChange={(e) => setComentarioManager(e.target.value)}
-                  disabled={!editable}
-                  rows={3}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Evaluación del hito: metas / escala */}
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium">📌 Evaluación del hito</h3>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xs text-slate-500">
-                  Resultado global
-                </span>
-                <span className="text-lg font-semibold text-indigo-700">
-                  {localHito?.actual != null
-                    ? `${Number(localHito.actual).toFixed(1)}%`
-                    : "—"}
-                </span>
-              </div>
-            </div>
-
-            {isAptitud ? (
-              <div className="grid gap-3">
-                <div className="border rounded-md p-3 bg-slate-50 shadow-sm">
-                  <label className="text-xs text-muted-foreground">
-                    Escala de evaluación
-                  </label>
-                  <select
-                    className="mt-1 w-full rounded-md border px-2 py-2 text-sm bg-white"
-                    disabled={!editable}
-                    value={localHito?.escala ?? ""}
-                    onChange={(e) =>
-                      setLocalHito((prev) => ({
-                        ...(prev || {}),
-                        escala: Number(e.target.value || 0),
-                        actual: scaleToPercent(Number(e.target.value || 0)),
-                      }))
-                    }
-                  >
-                    <option value="">Seleccionar…</option>
-                    <option value={1}>
-                      1 - Insatisfactorio / No cumple
-                    </option>
-                    <option value={2}>
-                      2 - Necesita mejorar / A veces cumple
-                    </option>
-                    <option value={3}>
-                      3 - Cumple con las expectativas
-                    </option>
-                    <option value={4}>
-                      4 - Supera las expectativas
-                    </option>
-                    <option value={5}>5 - Sobresaliente</option>
-                  </select>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Resultado global:{" "}
-                    <b>
-                      {localHito?.escala
-                        ? `${scaleToPercent(localHito.escala)}%`
-                        : "—"}
-                    </b>
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {dedupeMetas(localHito?.metas || []).map((m, idx) => {
-                  const isAcum =
-                    m.acumulativa || m.modoAcumulacion === "acumulativo";
-                  const prevAcum = isAcum
-                    ? getAcumuladoAnteriorForMeta(m, localHito.periodo)
-                    : 0;
-                  const currentVal =
-                    m.resultado != null ? Number(m.resultado) : null;
-                  const total =
-                    isAcum && currentVal != null
-                      ? prevAcum + currentVal
-                      : currentVal;
-
+                {[
+                  { id: "Q1", label: "Noviembre", sub: "Inicio", date: `${anio - 1}-11-01` },
+                  { id: "Q2", label: "Febrero", sub: "Seguimiento", date: `${anio}-02-01` },
+                  { id: "Q3", label: "Mayo", sub: "Seguimiento", date: `${anio}-05-01` },
+                  { id: "FINAL", label: "Agosto", sub: "Cierre Anual", date: `${anio}-08-30` }
+                ].map((p, idx) => {
+                  const fb = feedbacks.find(f => f.periodo === p.id);
+                  const isDone = fb?.estado === "REALIZADO" || fb?.estado === "CLOSED";
+                  const isFinal = p.id === "FINAL";
                   return (
-                    <div
-                      key={`${m._id ?? m.nombre}-${idx}`}
-                      className="border rounded-md p-3 bg-slate-50 shadow-sm"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-semibold">{m.nombre}</p>
-                          <p className="text-xs text-gray-500">
-                            Esperado: {m.operador || ">="} {m.esperado}{" "}
-                            {m.unidad}
-                            {isAcum && (
-                              <span className="ml-2 text-indigo-600 font-medium">
-                                (Acumulativo)
-                              </span>
-                            )}
-                          </p>
-                        </div>
+                    <div key={p.id} className="relative z-10 flex flex-col items-center group">
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm ${isDone ? 'bg-emerald-500 border-emerald-500 scale-110' : 'bg-white border-slate-300 group-hover:border-blue-400'}`}>
+                        {isDone && <div className="w-2 h-2 bg-white rounded-full" />}
                       </div>
-
-                      {m.unidad === "Cumple/No Cumple" ? (
-                        <label className="flex items-center gap-2 mt-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={!!m.resultado}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const val = e.target.checked;
-                              setLocalHito((prev) => {
-                                const metas = dedupeMetas([
-                                  ...(prev?.metas || []),
-                                ]);
-                                metas[idx] = {
-                                  ...metas[idx],
-                                  resultado: val,
-                                  cumple: val,
-                                };
-                                return { ...(prev || {}), metas };
-                              });
-                            }}
-                          />
-                          Cumplido
-                        </label>
-                      ) : (
-                        <>
-                          <input
-                            type="number"
-                            className="w-full rounded-md border px-2 py-1 text-sm mt-2 focus:ring-2 focus:ring-primary/40 outline-none bg-white"
-                            placeholder="Resultado alcanzado"
-                            value={m.resultado ?? ""}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const valor =
-                                e.target.value === ""
-                                  ? null
-                                  : Number(e.target.value);
-                              setLocalHito((prev) => {
-                                const metas = dedupeMetas([
-                                  ...(prev?.metas || []),
-                                ]);
-                                const valTotal =
-                                  isAcum && valor != null
-                                    ? prevAcum + valor
-                                    : valor;
-
-                                metas[idx] = {
-                                  ...metas[idx],
-                                  resultado: valor,
-                                  cumple: evaluarCumple(
-                                    valTotal,
-                                    metas[idx].esperado,
-                                    metas[idx].operador,
-                                    metas[idx].unidad
-                                  ),
-                                };
-                                return { ...(prev || {}), metas };
-                              });
-                            }}
-                          />
-
-                          {isAcum && (
-                            <div className="text-xs text-slate-500 mt-1 flex flex-col">
-                              <span>Anterior: {prevAcum}</span>
-                              <span className="font-semibold text-slate-700">
-                                Total: {total != null ? total : "—"}
-                              </span>
-                            </div>
-                          )}
-
-                          {m.resultado !== null &&
-                            m.resultado !== undefined && (
-                              <p
-                                className={`text-xs mt-1 font-medium ${
-                                  evaluarCumple(
-                                    total,
-                                    m.esperado,
-                                    m.operador,
-                                    m.unidad
-                                  )
-                                    ? "text-green-600"
-                                    : "text-red-600"
-                                }`}
-                              >
-                                {evaluarCumple(
-                                  total,
-                                  m.esperado,
-                                  m.operador,
-                                  m.unidad
-                                )
-                                  ? "✔ Cumplido"
-                                  : "✘ No cumple"}
-                              </p>
-                            )}
-                        </>
-                      )}
+                      <div className="mt-3 text-center">
+                        <div className={`text-sm font-bold ${isFinal ? 'text-blue-700' : 'text-slate-700'}`}>{p.label}</div>
+                        <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{p.sub}</div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            )}
-
-            {/* Acciones */}
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-              <p className="text-[11px] text-slate-500">
-                Recordá: podés guardar borrador y volver luego a esta evaluación
-                desde el Gantt.
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => persistAndFlow("draft")}
-                  disabled={saving || !editableTemporal}
-                >
-                  Guardar borrador
-                </Button>
-
-                <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                  <AlertDialogTrigger asChild>
-                    <Button disabled={saving || !editableTemporal}>
-                      Enviar al empleado
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 sm:max-w-md sm:rounded-2xl">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        ¿Confirmás el envío?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Una vez enviado, el empleado podrá ver la evaluación y
-                        continuar con su parte del flujo. No podrás modificar
-                        las metas ni los valores. ¿Querés continuar?
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => {
-                          setConfirmOpen(false);
-                          persistAndFlow("toEmployee");
-                        }}
-                      >
-                        Sí, enviar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
             </div>
-          </div>
-        </div>
 
-        {/* DERECHA: Trazabilidad */}
-        <div className="space-y-6 h-fit sticky top-24">
-          {itemSeleccionado && (
-            <TraceabilityCard
-              objetivo={itemSeleccionado}
-              trazabilidad={[
-                {
-                  estado: localHito?.estado?.toLowerCase() || "borrador",
-                  fecha: localHito?.fecha,
-                  usuario: "Jefe",
-                },
-                ...(localHito?.comentario
-                  ? [
-                      {
-                        estado: "feedback",
-                        fecha: new Date(),
-                        comentario: localHito.comentario,
-                      },
-                    ]
-                  : []),
-              ]}
-              resultadoGlobal={localHito?.actual}
-            />
-          )}
-        </div>
+
+            {/* CARDS GRID */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+              {[
+                { id: "Q1", title: "Feedback Noviembre", subtitle: "Primer Trimestre" },
+                { id: "Q2", title: "Feedback Febrero", subtitle: "Segundo Trimestre" },
+                { id: "Q3", title: "Feedback Mayo", subtitle: "Tercer Trimestre" },
+                { id: "FINAL", title: "Cierre Anual (Agosto)", subtitle: "Evaluación Final", isFinal: true }
+              ].map((conf) => {
+                const periodo = conf.id;
+                const fb = feedbacks.find(f => f.periodo === periodo) || { comentario: "", estado: "PENDIENTE" };
+                const isFinal = conf.isFinal;
+                const isExpanded = !!expandedFeedback[periodo];
+
+                // Función local para calcular breakdown del periodo
+                const getBreakdown = (p) => {
+                  if (!dashEmpleadoData) return { objetivos: 0, competencias: 0, global: 0, detailsObj: [], detailsComp: [] };
+
+                  // Objetivos
+                  let totalObjScore = 0;
+                  let totalObjWeight = 0;
+                  const detailsObj = [];
+
+                  dashEmpleadoData.objetivos?.forEach(obj => {
+                    const hito = obj.hitos?.find(h => h.periodo === p);
+                    if (hito && hito.actual !== null) {
+                      totalObjScore += Number(hito.actual) * (obj.peso || 0);
+                      totalObjWeight += (obj.peso || 0);
+                      detailsObj.push({ nombre: obj.nombre, score: Number(hito.actual) });
+                    }
+                  });
+                  const scoreObj = totalObjWeight > 0 ? (totalObjScore / totalObjWeight) : 0;
+
+                  // Competencias
+                  let totalCompScore = 0;
+                  let totalCompWeight = 0;
+                  const detailsComp = [];
+
+                  dashEmpleadoData.aptitudes?.forEach(apt => {
+                    const hito = apt.hitos?.find(h => h.periodo === p);
+                    if (hito && hito.actual !== null) {
+                      totalCompScore += Number(hito.actual) * (apt.peso || 0);
+                      totalCompWeight += (apt.peso || 0);
+                      detailsComp.push({ nombre: apt.nombre, score: Number(hito.actual) });
+                    }
+                  });
+                  const scoreComp = totalCompWeight > 0 ? (totalCompScore / totalCompWeight) : 0;
+
+                  // Global
+                  const wObj = resumenEmpleado?.objetivos?.peso || 80;
+                  const wComp = resumenEmpleado?.aptitudes?.peso || 20;
+                  const global = ((scoreObj * wObj) + (scoreComp * wComp)) / (wObj + wComp);
+
+                  return { objetivos: scoreObj, competencias: scoreComp, global, detailsObj, detailsComp };
+                };
+
+                const breakdown = getBreakdown(periodo);
+                const scoreDisplay = breakdown.global;
+
+                return (
+                  <Card key={periodo} className={`flex flex-col transition-all hover:shadow-md ${isFinal ? "border-blue-200 ring-1 ring-blue-50 bg-blue-50/10" : "border-slate-200"}`}>
+                    <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 rounded-t-xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <Badge variant="outline" className="bg-white text-slate-500 border-slate-200 font-normal">
+                          {periodo === "FINAL" ? anio : periodo}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <div className={`h-2 w-2 rounded-full ${fb.estado === "REALIZADO" ? "bg-emerald-500" : "bg-amber-400"}`}></div>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-blue-600" onClick={() => toggleFeedbackDetail(periodo)}>
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <CardTitle className={`text-base font-bold ${isFinal ? "text-blue-700" : "text-slate-800"}`}>
+                        {conf.title}
+                      </CardTitle>
+                      <p className="text-xs text-slate-500 font-medium">
+                        {conf.subtitle}
+                      </p>
+                    </CardHeader>
+
+                    <CardContent className="flex-1 flex flex-col gap-4 pt-4">
+                      {isFinal && (
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-blue-800 font-bold uppercase tracking-wider">Score Final</div>
+                            <div className="text-2xl font-black text-blue-600">{Math.round(scoreDisplay)}%</div>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <div className="flex-1 bg-white/60 border border-blue-200 rounded px-2 py-1 flex justify-between">
+                              <span className="text-blue-700 font-medium">Obj</span>
+                              <span className="font-bold text-blue-700">{Math.round(breakdown.objetivos)}%</span>
+                            </div>
+                            <div className="flex-1 bg-white/60 border border-blue-200 rounded px-2 py-1 flex justify-between">
+                              <span className="text-blue-700 font-medium">Comp</span>
+                              <span className="font-bold text-blue-700">{Math.round(breakdown.competencias)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {!isFinal && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-slate-500 font-medium">Score Parcial:</span>
+                            <span className="text-sm font-bold text-slate-700">{Math.round(scoreDisplay)}%</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <div className="flex-1 bg-white border rounded px-2 py-1 flex justify-between">
+                              <span className="text-slate-500">Obj</span>
+                              <span className="font-bold text-blue-600">{Math.round(breakdown.objetivos)}%</span>
+                            </div>
+                            <div className="flex-1 bg-white border rounded px-2 py-1 flex justify-between">
+                              <span className="text-slate-500">Comp</span>
+                              <span className="font-bold text-amber-600">{Math.round(breakdown.competencias)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* DETALLE EXPANDIBLE */}
+                      {isExpanded && (
+                        <div className="animate-in slide-in-from-top-2 duration-200 border-t pt-3 space-y-3">
+                          {breakdown.detailsObj.length > 0 && (
+                            <div>
+                              <div className="text-[10px] font-bold text-blue-600 uppercase mb-1 flex items-center gap-1">
+                                <Target className="w-3 h-3" /> Objetivos
+                              </div>
+                              <div className="space-y-1">
+                                {breakdown.detailsObj.map((d, i) => (
+                                  <div key={i} className="flex justify-between text-xs text-slate-600">
+                                    <span className="truncate max-w-[140px]">{d.nombre}</span>
+                                    <span className="font-semibold">{Math.round(d.score)}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {breakdown.detailsComp.length > 0 && (
+                            <div>
+                              <div className="text-[10px] font-bold text-amber-600 uppercase mb-1 flex items-center gap-1">
+                                <Lightbulb className="w-3 h-3" /> Competencias
+                              </div>
+                              <div className="space-y-1">
+                                {breakdown.detailsComp.map((d, i) => (
+                                  <div key={i} className="flex justify-between text-xs text-slate-600">
+                                    <span className="truncate max-w-[140px]">{d.nombre}</span>
+                                    <span className="font-semibold">{Math.round(d.score)}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {breakdown.detailsObj.length === 0 && breakdown.detailsComp.length === 0 && (
+                            <div className="text-xs text-slate-400 text-center italic">Sin datos evaluados</div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Feedback Manager</label>
+                        <textarea
+                          className="w-full h-20 rounded border-slate-200 p-2 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none resize-none"
+                          placeholder="Escribir feedback..."
+                          value={fb.comentario}
+                          onChange={(e) => handleFeedbackChange(periodo, e.target.value)}
+                        />
+                      </div>
+
+                      {/* ACCIONES */}
+                      <div className="flex items-center justify-between pt-2 gap-2">
+                        <Badge variant="outline" className={`${fb.estado === "REALIZADO" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                          {fb.estado === "REALIZADO" ? "Enviado" : "Pendiente"}
+                        </Badge>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleSaveFeedback(periodo, fb.comentario, "PENDIENTE")}>
+                            <Save className="w-3 h-3 mr-1" /> Guardar
+                          </Button>
+                          <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => handleSaveFeedback(periodo, fb.comentario, "REALIZADO")}>
+                            <Send className="w-3 h-3 mr-1" /> Enviar Feedback
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* FLOW STEPPER */}
+                      <div className="pt-4 border-t border-slate-100">
+                        <div className="flex items-center justify-between relative">
+                          <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-100 -z-0"></div>
+                          {[
+                            { label: "Borrador", status: "PENDIENTE" },
+                            { label: "Enviado al Empleado", status: "REALIZADO" },
+                            { label: "En RRHH", status: "PENDING_HR" },
+                            { label: "Cerrado", status: "CLOSED" }
+                          ].map((step, idx) => {
+                            const order = { "PENDIENTE": 0, "REALIZADO": 1, "PENDING_HR": 2, "CLOSED": 3 };
+                            const currentStep = order[fb.estado] ?? 0;
+                            const isActive = idx <= currentStep;
+                            const isCurrent = idx === currentStep;
+
+                            const icons = {
+                              "PENDIENTE": FileEdit,
+                              "REALIZADO": Send,
+                              "PENDING_HR": Users,
+                              "CLOSED": CheckCircle
+                            };
+                            const Icon = icons[step.status] || FileEdit;
+
+                            return (
+                              <div key={idx} className="relative z-10 flex flex-col items-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 ${isActive ? 'bg-blue-600 border-blue-600 text-white scale-110' : 'bg-white border-slate-300 text-slate-400'}`}>
+                                  <Icon className="w-4 h-4" />
+                                </div>
+                                <span className={`text-[8px] mt-1 font-medium ${isCurrent ? 'text-blue-700' : 'text-slate-400'}`}>{step.label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* EMPLOYEE RESPONSE */}
+                      {(fb.estado === "REALIZADO" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED") && (
+                        <div className="bg-slate-50 p-3 rounded border border-slate-100 mt-3 space-y-2 opacity-80">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-2">
+                            <UserCircle2 className="w-3 h-3" /> Respuesta del Colaborador
+                          </label>
+                          <div className="flex items-center gap-4 text-xs">
+                            <div className={`flex items-center gap-1 ${fb.acuerdo === true ? "text-emerald-700 font-bold" : "text-slate-400"}`}>
+                              <div className={`w-3 h-3 rounded-full border ${fb.acuerdo === true ? "bg-emerald-500 border-emerald-500" : "border-slate-300"}`}></div>
+                              Estoy de acuerdo
+                            </div>
+                            <div className={`flex items-center gap-1 ${fb.acuerdo === false ? "text-rose-700 font-bold" : "text-slate-400"}`}>
+                              <div className={`w-3 h-3 rounded-full border ${fb.acuerdo === false ? "bg-rose-500 border-rose-500" : "border-slate-300"}`}></div>
+                              En desacuerdo
+                            </div>
+                          </div>
+                          {fb.comentarioEmpleado && (
+                            <p className="text-xs text-slate-600 italic border-l-2 border-slate-300 pl-2">
+                              "{fb.comentarioEmpleado}"
+                            </p>
+                          )}
+                          {!fb.comentarioEmpleado && (
+                            <p className="text-[10px] text-slate-400 italic">Sin comentarios del colaborador</p>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+
+          </div>
+        )}
       </div>
     </div>
   );

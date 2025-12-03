@@ -45,7 +45,7 @@ export default function SimuladorObjetivos() {
     const [aptitudes, setAptitudes] = useState([
         {
             id: 201,
-            nombre: "Aptitud Ejemplo",
+            nombre: "Competencia Ejemplo",
             pesoBase: 100,
             valor: 3,
         },
@@ -173,7 +173,7 @@ export default function SimuladorObjetivos() {
             ...aptitudes,
             {
                 id: Date.now(),
-                nombre: "Nueva Aptitud",
+                nombre: "Nueva Competencia",
                 pesoBase: 0,
                 valor: 3,
             },
@@ -223,10 +223,15 @@ export default function SimuladorObjetivos() {
                         pesoMeta: Number(m.pesoMeta),
                         modoAcumulacion: m.modoAcumulacion,
                         reglaCierre: m.reglaCierre,
-                        registros: m.registros,
+                        registros: m.registros.filter(r =>
+                            o.frecuencia === "mensual"
+                                ? r.periodo.startsWith("M")
+                                : r.periodo.startsWith("Q")
+                        ),
                         reconoceEsfuerzo: m.reconoceEsfuerzo,
                         permiteOver: m.permiteOver,
                         tolerancia: Number(m.tolerancia),
+                        umbralPeriodos: Number(m.umbralPeriodos),
                     })),
                 })),
                 aptitudes: aptitudesPayload,
@@ -302,11 +307,15 @@ export default function SimuladorObjetivos() {
                         <div className="flex-1 w-full lg:w-auto flex flex-col sm:flex-row items-center justify-end gap-8 animate-in fade-in slide-in-from-right-4 duration-500">
                             <div className="text-center">
                                 <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Objetivos</div>
-                                <div className="text-3xl font-bold text-blue-400">{resultado.resumen.objetivos}%</div>
+                                <div className="text-3xl font-bold text-blue-400">
+                                    {((Number(resultado.resumen.objetivos) * Number(pesoObj)) / 100).toFixed(1)}%
+                                </div>
                             </div>
                             <div className="text-center">
-                                <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Aptitudes</div>
-                                <div className="text-3xl font-bold text-amber-400">{resultado.resumen.aptitudes}%</div>
+                                <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Competencias</div>
+                                <div className="text-3xl font-bold text-amber-400">
+                                    {((Number(resultado.resumen.aptitudes) * Number(pesoApt)) / 100).toFixed(1)}%
+                                </div>
                             </div>
                             <div className="h-12 w-px bg-slate-700 hidden sm:block"></div>
                             <div className="text-center">
@@ -439,8 +448,8 @@ export default function SimuladorObjetivos() {
                                                     </Button>
 
                                                     {/* Config Meta */}
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 pr-6">
-                                                        <div className="md:col-span-2">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2 pr-6">
+                                                        <div className="md:col-span-2 lg:col-span-1">
                                                             <label className="text-[10px] text-muted-foreground font-medium">Meta</label>
                                                             <Input
                                                                 value={meta.nombre}
@@ -465,15 +474,18 @@ export default function SimuladorObjetivos() {
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="text-[10px] text-muted-foreground font-medium">Peso %</label>
-                                                            <Input
-                                                                type="number"
-                                                                className="h-8 text-sm"
-                                                                value={meta.pesoMeta}
+                                                            <label className="text-[10px] text-muted-foreground font-medium">Operador</label>
+                                                            <select
+                                                                className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                                                                value={meta.operador}
                                                                 onChange={(e) =>
-                                                                    updateMeta(obj.id, meta.id, "pesoMeta", e.target.value)
+                                                                    updateMeta(obj.id, meta.id, "operador", e.target.value)
                                                                 }
-                                                            />
+                                                            >
+                                                                <option value=">=">{">="} Mayor o igual</option>
+                                                                <option value="<=">{"<="} Menor o igual</option>
+                                                                <option value="=">{"="} Igual</option>
+                                                            </select>
                                                         </div>
                                                         <div>
                                                             <label className="text-[10px] text-muted-foreground font-medium">Esperado</label>
@@ -483,6 +495,17 @@ export default function SimuladorObjetivos() {
                                                                 value={meta.esperado}
                                                                 onChange={(e) =>
                                                                     updateMeta(obj.id, meta.id, "esperado", e.target.value)
+                                                                }
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] text-muted-foreground font-medium">Peso %</label>
+                                                            <Input
+                                                                type="number"
+                                                                className="h-8 text-sm"
+                                                                value={meta.pesoMeta}
+                                                                onChange={(e) =>
+                                                                    updateMeta(obj.id, meta.id, "pesoMeta", e.target.value)
                                                                 }
                                                             />
                                                         </div>
@@ -499,7 +522,7 @@ export default function SimuladorObjetivos() {
                                                                 <option value="acumulativo">Acumulativo</option>
                                                             </select>
                                                         </div>
-                                                        <div className="md:col-span-2">
+                                                        <div className="md:col-span-2 lg:col-span-1">
                                                             <label className="text-[10px] text-muted-foreground font-medium">Cierre</label>
                                                             <select
                                                                 className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
@@ -513,6 +536,20 @@ export default function SimuladorObjetivos() {
                                                                 <option value="umbral_periodos">Umbral Períodos</option>
                                                             </select>
                                                         </div>
+                                                        {meta.reglaCierre === "umbral_periodos" && (
+                                                            <div>
+                                                                <label className="text-[10px] text-muted-foreground font-medium">Umbral (Cant.)</label>
+                                                                <Input
+                                                                    type="number"
+                                                                    className="h-8 text-sm"
+                                                                    value={meta.umbralPeriodos || ""}
+                                                                    placeholder="Ej: 3"
+                                                                    onChange={(e) =>
+                                                                        updateMeta(obj.id, meta.id, "umbralPeriodos", e.target.value)
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     {/* Opciones Avanzadas Compactas */}
@@ -556,25 +593,46 @@ export default function SimuladorObjetivos() {
                                                                 const reg = meta.registros.find(
                                                                     (r) => r.periodo === p
                                                                 );
+
+                                                                // Buscar resultado de este periodo si existe
+                                                                const metaResult = resultado?.objetivos
+                                                                    ?.find(o => o.nombre === obj.nombre)
+                                                                    ?.metas?.find(m => m.nombre === meta.nombre)
+                                                                    ?.resultado;
+
+                                                                const periodResult = metaResult?.periodos?.find(pr => pr.periodo === p);
+                                                                const isEvaluated = periodResult !== undefined;
+                                                                const isPass = periodResult?.cumple;
+
                                                                 return (
-                                                                    <div key={p} className="col-span-1">
+                                                                    <div key={p} className="col-span-1 relative group/input">
                                                                         <label className="text-[9px] text-center block text-muted-foreground mb-0.5">
                                                                             {p}
                                                                         </label>
-                                                                        <Input
-                                                                            type="number"
-                                                                            placeholder="-"
-                                                                            className="text-center h-7 text-xs px-0.5 bg-slate-50 focus:bg-white transition-colors"
-                                                                            value={reg?.valor ?? ""}
-                                                                            onChange={(e) =>
-                                                                                updateRegistro(
-                                                                                    obj.id,
-                                                                                    meta.id,
-                                                                                    p,
-                                                                                    e.target.value
-                                                                                )
-                                                                            }
-                                                                        />
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                placeholder="-"
+                                                                                className={`text-center h-7 text-xs px-0.5 transition-all ${isEvaluated
+                                                                                    ? isPass
+                                                                                        ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-medium"
+                                                                                        : "bg-red-50 border-red-500 text-red-700 font-medium"
+                                                                                    : "bg-slate-50 focus:bg-white"
+                                                                                    }`}
+                                                                                value={reg?.valor ?? ""}
+                                                                                onChange={(e) =>
+                                                                                    updateRegistro(
+                                                                                        obj.id,
+                                                                                        meta.id,
+                                                                                        p,
+                                                                                        e.target.value
+                                                                                    )
+                                                                                }
+                                                                            />
+                                                                            {isEvaluated && (
+                                                                                <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${isPass ? "bg-emerald-500" : "bg-red-500"}`} />
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 );
                                                             })}
@@ -602,17 +660,17 @@ export default function SimuladorObjetivos() {
                 <div className="space-y-6">
                     <div className="flex items-center justify-between border-b pb-2">
                         <h2 className="text-xl font-semibold flex items-center gap-2 text-amber-700">
-                            <Lightbulb className="w-5 h-5" /> Aptitudes
+                            <Lightbulb className="w-5 h-5" /> Competencias
                         </h2>
                         <Button variant="outline" size="sm" onClick={handleAddAptitud} className="border-dashed border-amber-300 text-amber-700 hover:bg-amber-50">
-                            <Plus className="w-4 h-4 mr-1" /> Agregar Aptitud
+                            <Plus className="w-4 h-4 mr-1" /> Agregar Competencia
                         </Button>
                     </div>
 
                     <div className="space-y-4">
                         {aptitudes.length === 0 && (
                             <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-lg">
-                                No hay aptitudes.
+                                No hay competencias.
                             </div>
                         )}
                         {aptitudes.map((apt) => (

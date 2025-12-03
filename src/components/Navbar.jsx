@@ -162,8 +162,7 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
                 {/* Asignaciones (solo RRHH o Directivos) */}
                 {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/asignaciones', 'Asignaciones', true)}
 
-                {/* Simulador (Jefes, RRHH, Directivos) */}
-                {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/simulador', 'Simulador', true)}
+
 
                 {/* Seguimiento (RRHH/Directivos/Nómina/Referentes) */}
                 {(hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente) &&

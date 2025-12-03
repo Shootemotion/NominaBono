@@ -1,6 +1,7 @@
 // src/controllers/evaluacion.controller.js
 import mongoose from "mongoose";
 import Evaluacion from "../models/Evaluacion.model.js";
+import Plantilla from "../models/Plantilla.model.js";
 import {
   normalizarConfigMeta,
   calcularScorePeriodoMeta,
@@ -25,7 +26,7 @@ function pushTimeline(ev, { by, action, note, snapshot }) {
  * ACA es donde se respeta reconoceEsfuerzo / tolerancia / permiteOver,
  * porque usamos normalizarConfigMeta + calcularScorePeriodoMeta.
  */
-function prepararMetasPeriodo(metasResultados = []) {
+function prepararMetasPeriodo(metasResultados = [], acumulados = {}) {
   if (!Array.isArray(metasResultados) || metasResultados.length === 0) {
     return { metasProcesadas: [], scoreObjetivo: null };
   }
@@ -33,8 +34,16 @@ function prepararMetasPeriodo(metasResultados = []) {
   const metasConScore = metasResultados.map((m) => {
     // une params del frontend con defaults de la meta de plantilla
     const cfg = normalizarConfigMeta(m);
+
+    // Lógica de acumulación
+    let valorParaCalculo = Number(m.resultado) || 0;
+    if (cfg.modoAcumulacion === "acumulativo") {
+      const prev = acumulados[m.metaId] || 0;
+      valorParaCalculo += prev;
+    }
+
     // calcula scoreMeta (0..100/120) + cumple usando reconoceEsfuerzo, etc.
-    const { score, cumple } = calcularScorePeriodoMeta(cfg, m.resultado);
+    const { score, cumple } = calcularScorePeriodoMeta(cfg, valorParaCalculo);
 
     return {
       metaId: m.metaId ?? null,
@@ -84,9 +93,31 @@ export const updateHito = async (req, res) => {
       return res.status(400).json({ message: "El periodo es obligatorio" });
     }
 
+    // Calcular acumulados de períodos anteriores (solo si es para un empleado específico)
+    const acumulados = {};
+    if (!applyToAll && (!empleadosIds || empleadosIds.length === 0)) {
+      const anio = Number(String(periodo).slice(0, 4));
+      const siblings = await Evaluacion.find({
+        plantillaId,
+        year: anio,
+        empleado: empleadoId,
+        periodo: { $lt: periodo } // Períodos anteriores
+      }).lean();
+
+      siblings.forEach(ev => {
+        ev.metasResultados?.forEach(m => {
+          if (m.metaId) {
+            if (!acumulados[m.metaId]) acumulados[m.metaId] = 0;
+            acumulados[m.metaId] += Number(m.resultado) || 0;
+          }
+        });
+      });
+    }
+
     // 🔹 procesar metas → scoreMeta & cumple para este período
     const { metasProcesadas, scoreObjetivo } = prepararMetasPeriodo(
-      metasResultados
+      metasResultados,
+      acumulados
     );
 
     const baseUpdate = {
@@ -235,8 +266,8 @@ export async function listEvaluaciones(req, res) {
           pl.pesoBase !== undefined
             ? Number(pl.pesoBase)
             : ev.pesoBase !== undefined
-            ? Number(ev.pesoBase)
-            : null,
+              ? Number(ev.pesoBase)
+              : null,
         fechaLimite: pl.fechaLimite || ev.fechaLimite || null,
         metas:
           pl.metas && pl.metas.length > 0 ? pl.metas : ev.metasResultados || [],
@@ -278,8 +309,8 @@ export async function getEvaluacionById(req, res) {
         pl.pesoBase !== undefined
           ? Number(pl.pesoBase)
           : ev.pesoBase !== undefined
-          ? Number(ev.pesoBase)
-          : null,
+            ? Number(ev.pesoBase)
+            : null,
       fechaLimite: pl.fechaLimite || ev.fechaLimite || null,
       metas:
         pl.metas && pl.metas.length > 0 ? pl.metas : ev.metasResultados || [],
@@ -549,10 +580,10 @@ export async function listPendingHR(req, res) {
       ...ev,
       plantilla: ev.plantillaId
         ? {
-            _id: ev.plantillaId._id,
-            nombre: ev.plantillaId.nombre,
-            fechaLimite: ev.plantillaId.fechaLimite || null,
-          }
+          _id: ev.plantillaId._id,
+          nombre: ev.plantillaId.nombre,
+          fechaLimite: ev.plantillaId.fechaLimite || null,
+        }
         : null,
     }));
 
@@ -688,5 +719,126 @@ export async function createEvaluacion(req, res) {
   } catch (e) {
     console.error("❌ createEvaluacion error", e);
     res.status(500).json({ message: e.message || "Error creando evaluación" });
+  }
+}
+
+/* ----------- Recalcular Evaluaciones (Sync con Plantilla) ----------- */
+
+export async function recalculateEvaluaciones(req, res) {
+  try {
+    const { plantillaId, year, empleadoId } = req.body;
+
+    if (!plantillaId || !year) {
+      return res.status(400).json({ message: "Faltan plantillaId o year" });
+    }
+
+    // 1. Obtener la plantilla con la configuración ACTUAL
+    const plantilla = await Plantilla.findById(plantillaId).lean();
+    if (!plantilla) {
+      return res.status(404).json({ message: "Plantilla no encontrada" });
+    }
+
+    // 2. Buscar evaluaciones afectadas
+    const q = {
+      plantillaId: new mongoose.Types.ObjectId(String(plantillaId)),
+      year: Number(year),
+    };
+    if (empleadoId) {
+      q.empleado = new mongoose.Types.ObjectId(String(empleadoId));
+    }
+
+    const evaluaciones = await Evaluacion.find(q).lean(); // Use lean for performance if we just update later, but we need to save() documents. 
+    // Actually, find() returns documents. Let's keep it as documents to use .save() easily, or use bulkWrite.
+    // Given the previous code used .save(), let's stick to it but we need to sort them.
+    // Since we need to sort, we can't rely on database cursor order unless we sort in query.
+    // Let's re-fetch with sort.
+
+    const evaluacionesDocs = await Evaluacion.find(q).sort({ empleado: 1, periodo: 1 });
+
+    let updatedCount = 0;
+    const acumuladosPorEmpleado = {}; // { [empId]: { [metaId]: value } }
+
+    // 3. Recorrer y actualizar
+    for (const ev of evaluacionesDocs) {
+      const empId = String(ev.empleado);
+      if (!acumuladosPorEmpleado[empId]) acumuladosPorEmpleado[empId] = {};
+
+      if (!ev.metasResultados || ev.metasResultados.length === 0) continue;
+
+      // Mapear metas actuales con la config nueva
+      const nuevasMetasResultados = ev.metasResultados.map(m => {
+        // Buscar meta correspondiente en la plantilla
+        const metaConfig = plantilla.metas.find(pm =>
+          (m.metaId && String(pm._id) === String(m.metaId)) ||
+          pm.nombre === m.nombre
+        );
+
+        if (!metaConfig) return m; // Si no existe en plantilla, dejar como está
+
+        // Mezclar resultado existente con NUEVA config
+        const cfg = normalizarConfigMeta({
+          ...m, // conservar resultado
+          ...metaConfig, // sobreescribir config
+          metaId: metaConfig._id, // asegurar ID correcto
+        });
+
+        // Lógica de acumulación
+        let valorParaCalculo = Number(m.resultado) || 0;
+        if (cfg.modoAcumulacion === "acumulativo") {
+          const prev = acumuladosPorEmpleado[empId][metaConfig._id] || 0;
+          valorParaCalculo += prev;
+
+          // Actualizar acumulado para el SIGUIENTE periodo
+          if (!acumuladosPorEmpleado[empId][metaConfig._id]) acumuladosPorEmpleado[empId][metaConfig._id] = 0;
+          acumuladosPorEmpleado[empId][metaConfig._id] += (Number(m.resultado) || 0);
+        }
+
+        // Recalcular score y cumple
+        const { score, cumple } = calcularScorePeriodoMeta(cfg, valorParaCalculo);
+
+        return {
+          metaId: metaConfig._id,
+          nombre: metaConfig.nombre,
+          unidad: metaConfig.unidad,
+          operador: metaConfig.operador || ">=",
+          esperado: metaConfig.esperado ?? metaConfig.target ?? null,
+          pesoMeta: metaConfig.pesoMeta ?? null,
+          reconoceEsfuerzo: cfg.reconoceEsfuerzo,
+          permiteOver: cfg.permiteOver,
+          tolerancia: cfg.tolerancia,
+          modoAcumulacion: cfg.modoAcumulacion,
+          acumulativa: metaConfig.acumulativa ?? false,
+          reglaCierre: cfg.reglaCierre,
+          resultado: m.resultado,
+          cumple,
+          scoreMeta: score,
+        };
+      });
+
+      // Recalcular score objetivo global
+      const nuevoScoreObjetivo = calcularScoreObjetivoDesdeMetas(nuevasMetasResultados);
+
+      // Actualizar documento
+      const metasFinales = nuevasMetasResultados.map(({ scoreMeta, ...rest }) => rest);
+
+      ev.metasResultados = metasFinales;
+      ev.actual = nuevoScoreObjetivo;
+
+      // Timeline entry
+      pushTimeline(ev, {
+        by: req.user?._id,
+        action: "RECALCULATE_SYNC",
+        note: "Sincronización con reglas de plantilla",
+      });
+
+      await ev.save();
+      updatedCount++;
+    }
+
+    res.json({ success: true, updated: updatedCount });
+
+  } catch (e) {
+    console.error("❌ recalculateEvaluaciones error", e);
+    res.status(500).json({ message: e.message || "Error recalculando evaluaciones" });
   }
 }

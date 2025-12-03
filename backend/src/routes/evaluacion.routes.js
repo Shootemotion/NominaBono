@@ -20,7 +20,8 @@ import {
   createEvaluacion,              // POST /evaluaciones
   listPendingHR,                 // GET  /evaluaciones/hr/pending
   closeBulk,                     // POST /evaluaciones/hr/close-bulk
-  getScoringAnualEmpleado ,
+  getScoringAnualEmpleado,
+  recalculateEvaluaciones,       // POST /evaluaciones/recalculate
 } from "../controllers/evaluacion.controller.js";
 
 const router = Router();
@@ -33,6 +34,14 @@ router.get(
   authenticateJWT,
   requireCap("nomina:ver"),
   getEvaluacionById
+);
+
+// Recalcular Evaluaciones (Sync)
+router.post(
+  "/recalculate",
+  authenticateJWT,
+  requireCap("nomina:evaluar"),
+  recalculateEvaluaciones
 );
 
 // Listado flexible por query

@@ -24,6 +24,8 @@ import usuariosRoutes from './src/routes/usuarios.routes.js';
 import evaluacionRoutes from './src/routes/evaluacion.routes.js';
 import simulacionRoutes from './src/routes/simulacion.routes.js';
 
+import feedbackRoutes from './src/routes/feedback.routes.js';
+
 // --- CONFIGURACIÓN INICIAL ---
 dotenv.config();
 const app = express();
@@ -54,6 +56,7 @@ app.use('/api/assignments', assignmentsRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/evaluaciones', evaluacionRoutes);
 app.use('/api/simulacion', simulacionRoutes);
+app.use('/api/feedbacks', feedbackRoutes);
 
 // Alias útil para debug del usuario autenticado
 app.get('/api/_whoami', whoami);
