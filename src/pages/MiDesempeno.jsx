@@ -28,20 +28,24 @@ import {
 const StatusBadge = ({ status }) => {
   const styles = {
     "SENT": "bg-blue-50 text-blue-700 border-blue-200",
-    "REALIZADO": "bg-blue-50 text-blue-700 border-blue-200", // Mapped to SENT style
-    "ACKNOWLEDGED": "bg-purple-50 text-purple-700 border-purple-200",
-    "CLOSED": "bg-slate-100 text-slate-600 border-slate-200",
+    "REALIZADO": "bg-blue-50 text-blue-700 border-blue-200",
+    "PENDING_HR": "bg-purple-50 text-purple-700 border-purple-200",
+    "ACKNOWLEDGED": "bg-purple-50 text-purple-700 border-purple-200", // Legacy support
+    "CLOSED": "bg-emerald-50 text-emerald-700 border-emerald-200",
     "PENDIENTE": "bg-amber-50 text-amber-700 border-amber-200",
-    "DRAFT": "bg-amber-50 text-amber-700 border-amber-200"
+    "DRAFT": "bg-amber-50 text-amber-700 border-amber-200",
+    "VENCIDO": "bg-rose-50 text-rose-700 border-rose-200"
   };
 
   const labels = {
-    "SENT": "Enviado",
-    "REALIZADO": "Enviado",
-    "ACKNOWLEDGED": "En RRHH",
-    "CLOSED": "Cerrado",
+    "SENT": "Enviado al empleado",
+    "REALIZADO": "Enviado al empleado",
+    "PENDING_HR": "Enviado a RRHH",
+    "ACKNOWLEDGED": "Enviado a RRHH", // Legacy support
+    "CLOSED": "Finalizado",
     "PENDIENTE": "Borrador",
-    "DRAFT": "Borrador"
+    "DRAFT": "Borrador",
+    "VENCIDO": "Vencido"
   };
 
   return (
@@ -357,7 +361,7 @@ export default function MiDesempeno() {
         empleado: empleadoId,
         year: selectedFeedback.year,
         periodo: selectedFeedback.periodo,
-        estado: selectedFeedback.estado === "SENT" ? "ACKNOWLEDGED" : selectedFeedback.estado,
+        estado: selectedFeedback.estado === "SENT" ? "PENDING_HR" : selectedFeedback.estado,
         comentario: selectedFeedback.comentario,
         comentarioEmpleado: localComment,
         empleadoAck: {
@@ -473,7 +477,7 @@ export default function MiDesempeno() {
                   {timelineItems.map((p) => {
                     const fb = feedbacks.find(f => f.periodo === p.id);
                     const isSelected = selectedFeedback?.periodo === p.id;
-                    const isDone = fb?.estado === "SENT" || fb?.estado === "REALIZADO" || fb?.estado === "ACKNOWLEDGED" || fb?.estado === "CLOSED";
+                    const isDone = fb?.estado === "SENT" || fb?.estado === "REALIZADO" || fb?.estado === "PENDING_HR" || fb?.estado === "ACKNOWLEDGED" || fb?.estado === "CLOSED";
                     const isFuture = !fb || fb.isPlaceholder;
 
                     let statusColor = "bg-white border-slate-300 text-slate-400";
@@ -527,7 +531,16 @@ export default function MiDesempeno() {
                           )}
                         </div>
                       </div>
-                      <StatusBadge status={selectedFeedback.estado} />
+                      <StatusBadge status={(() => {
+                        if (selectedFeedback.estado !== "DRAFT" && selectedFeedback.estado !== "PENDIENTE") return selectedFeedback.estado;
+                        // Check if Vencido
+                        const item = timelineItems.find(t => t.id === selectedFeedback.periodo);
+                        if (!item) return selectedFeedback.estado;
+                        const deadline = new Date(item.date);
+                        // Asumimos vencimiento 30 días después de la fecha indicada
+                        deadline.setDate(deadline.getDate() + 30);
+                        return new Date() > deadline ? "VENCIDO" : selectedFeedback.estado;
+                      })()} />
                     </div>
 
                     {!selectedFeedback.isPlaceholder && (

@@ -116,10 +116,12 @@ function bucketConfig(bucket) {
   switch (bucket) {
     case "por_vencer": return { label: "Por vencer", chip: "🔥 Por vencer", badgeClass: "bg-amber-100 text-amber-800", canEdit: true };
     case "vencido": return { label: "Vencidos", chip: "⚠ Vencido", badgeClass: "bg-rose-100 text-rose-800", canEdit: true };
-    case "PENDING_EMPLOYEE": return { label: "Enviado", chip: "📨 Enviado", badgeClass: "bg-cyan-100 text-cyan-800", canEdit: false };
-    case "PENDING_HR": return { label: "En RRHH", chip: "🏢 En RRHH", badgeClass: "bg-blue-100 text-blue-800", canEdit: false };
-    case "CLOSED": return { label: "Cerrado", chip: "✅ Cerrado", badgeClass: "bg-emerald-100 text-emerald-800", canEdit: false };
-    default: return { label: "Futuro", chip: "⏳ Futuro", badgeClass: "bg-slate-100 text-slate-700", canEdit: false };
+    // Estados de flujo antiguos (ahora se consideran simplemente evaluados o en proceso)
+    case "PENDING_EMPLOYEE":
+    case "PENDING_HR":
+    case "CLOSED":
+      return { label: "Evaluado", chip: "✅ Evaluado", badgeClass: "bg-emerald-100 text-emerald-800", canEdit: true };
+    default: return { label: "En curso", chip: "⏳ En curso", badgeClass: "bg-slate-100 text-slate-700", canEdit: true };
   }
 }
 
@@ -481,7 +483,7 @@ export default function EvaluacionFlujo() {
         copy[idx] = { ...copy[idx], comentario: val };
         return copy;
       } else {
-        return [...prev, { periodo, comentario: val, estado: "PENDIENTE" }];
+        return [...prev, { periodo, comentario: val, estado: "DRAFT" }];
       }
     });
   };
@@ -891,7 +893,7 @@ export default function EvaluacionFlujo() {
                   { id: "FINAL", label: "Agosto", sub: "Cierre Anual", date: `${anio}-08-30` }
                 ].map((p, idx) => {
                   const fb = feedbacks.find(f => f.periodo === p.id);
-                  const isDone = fb?.estado === "REALIZADO" || fb?.estado === "CLOSED";
+                  const isDone = fb?.estado === "SENT" || fb?.estado === "PENDING_HR" || fb?.estado === "CLOSED";
                   const isFinal = p.id === "FINAL";
                   return (
                     <div key={p.id} className="relative z-10 flex flex-col items-center group">
@@ -918,7 +920,7 @@ export default function EvaluacionFlujo() {
                 { id: "FINAL", title: "Cierre Anual (Agosto)", subtitle: "Evaluación Final", isFinal: true }
               ].map((conf) => {
                 const periodo = conf.id;
-                const fb = feedbacks.find(f => f.periodo === periodo) || { comentario: "", estado: "PENDIENTE" };
+                const fb = feedbacks.find(f => f.periodo === periodo) || { comentario: "", estado: "DRAFT" };
                 const isFinal = conf.isFinal;
                 const isExpanded = !!expandedFeedback[periodo];
 
@@ -975,7 +977,7 @@ export default function EvaluacionFlujo() {
                           {periodo === "FINAL" ? anio : periodo}
                         </Badge>
                         <div className="flex items-center gap-2">
-                          <div className={`h-2 w-2 rounded-full ${fb.estado === "REALIZADO" ? "bg-emerald-500" : "bg-amber-400"}`}></div>
+                          <div className={`h-2 w-2 rounded-full ${fb.estado === "SENT" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED" ? "bg-emerald-500" : "bg-amber-400"}`}></div>
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-blue-600" onClick={() => toggleFeedbackDetail(periodo)}>
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </Button>
@@ -1081,14 +1083,33 @@ export default function EvaluacionFlujo() {
 
                       {/* ACCIONES */}
                       <div className="flex items-center justify-between pt-2 gap-2">
-                        <Badge variant="outline" className={`${fb.estado === "REALIZADO" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                          {fb.estado === "REALIZADO" ? "Enviado" : "Pendiente"}
+                        <Badge variant="outline" className={`${(fb.estado === "SENT" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED") ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                          {(() => {
+                            if (fb.estado === "SENT") return "Enviado al empleado";
+                            if (fb.estado === "PENDING_HR") return "Enviado a RRHH";
+                            if (fb.estado === "CLOSED") return "Finalizado";
+
+                            // Check Vencido
+                            const timeline = [
+                              { id: "Q1", date: `${anio - 1}-11-01` },
+                              { id: "Q2", date: `${anio}-02-01` },
+                              { id: "Q3", date: `${anio}-05-01` },
+                              { id: "FINAL", date: `${anio}-08-30` }
+                            ];
+                            const item = timeline.find(t => t.id === periodo);
+                            if (item) {
+                              const deadline = new Date(item.date);
+                              deadline.setDate(deadline.getDate() + 30);
+                              if (new Date() > deadline) return "Vencido";
+                            }
+                            return "Borrador";
+                          })()}
                         </Badge>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleSaveFeedback(periodo, fb.comentario, "PENDIENTE")}>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleSaveFeedback(periodo, fb.comentario, "DRAFT")}>
                             <Save className="w-3 h-3 mr-1" /> Guardar
                           </Button>
-                          <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => handleSaveFeedback(periodo, fb.comentario, "REALIZADO")}>
+                          <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => handleSaveFeedback(periodo, fb.comentario, "SENT")}>
                             <Send className="w-3 h-3 mr-1" /> Enviar Feedback
                           </Button>
                         </div>
@@ -1099,19 +1120,19 @@ export default function EvaluacionFlujo() {
                         <div className="flex items-center justify-between relative">
                           <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-100 -z-0"></div>
                           {[
-                            { label: "Borrador", status: "PENDIENTE" },
-                            { label: "Enviado al Empleado", status: "REALIZADO" },
-                            { label: "En RRHH", status: "PENDING_HR" },
-                            { label: "Cerrado", status: "CLOSED" }
+                            { label: "Borrador", status: "DRAFT" },
+                            { label: "Enviado al Empleado", status: "SENT" },
+                            { label: "Enviado a RRHH", status: "PENDING_HR" },
+                            { label: "Finalizado", status: "CLOSED" }
                           ].map((step, idx) => {
-                            const order = { "PENDIENTE": 0, "REALIZADO": 1, "PENDING_HR": 2, "CLOSED": 3 };
+                            const order = { "DRAFT": 0, "SENT": 1, "PENDING_HR": 2, "CLOSED": 3 };
                             const currentStep = order[fb.estado] ?? 0;
                             const isActive = idx <= currentStep;
                             const isCurrent = idx === currentStep;
 
                             const icons = {
-                              "PENDIENTE": FileEdit,
-                              "REALIZADO": Send,
+                              "DRAFT": FileEdit,
+                              "SENT": Send,
                               "PENDING_HR": Users,
                               "CLOSED": CheckCircle
                             };
@@ -1130,7 +1151,7 @@ export default function EvaluacionFlujo() {
                       </div>
 
                       {/* EMPLOYEE RESPONSE */}
-                      {(fb.estado === "REALIZADO" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED") && (
+                      {(fb.estado === "SENT" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED") && (
                         <div className="bg-slate-50 p-3 rounded border border-slate-100 mt-3 space-y-2 opacity-80">
                           <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-2">
                             <UserCircle2 className="w-3 h-3" /> Respuesta del Colaborador

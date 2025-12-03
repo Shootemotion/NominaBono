@@ -22,7 +22,7 @@ const FeedbackSchema = new mongoose.Schema(
         },
         estado: {
             type: String,
-            enum: ["DRAFT", "SENT", "ACKNOWLEDGED", "CLOSED"],
+            enum: ["DRAFT", "SENT", "PENDING_HR", "CLOSED"],
             default: "DRAFT",
         },
         correctionCount: { type: Number, default: 0 },
