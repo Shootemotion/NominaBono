@@ -5,7 +5,8 @@ export default function FilterBar({
   empQuery, setEmpQuery,
   empSelectedId, setEmpSelectedId,
   empHints, showEmpHints, setShowEmpHints,
-  mainTab, setMainTab
+  mainTab, setMainTab,
+  hideAreaFilter = false
 }) {
   return (
     <div className="card p-4 mb-4 space-y-4">
@@ -42,18 +43,20 @@ export default function FilterBar({
           />
         </div>
 
-        <div>
-          <label className="text-xs text-muted-foreground">Área</label>
-          <select
-            value={areaFiltro}
-            onChange={(e) => setAreaFiltro(e.target.value)}
-            className="w-full rounded-md border px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/40 outline-none"
-          >
-            {areasUnicas.map((a) => (
-              <option key={a._id} value={a._id}>{a.nombre}</option>
-            ))}
-          </select>
-        </div>
+        {!hideAreaFilter && (
+          <div>
+            <label className="text-xs text-muted-foreground">Área</label>
+            <select
+              value={areaFiltro}
+              onChange={(e) => setAreaFiltro(e.target.value)}
+              className="w-full rounded-md border px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/40 outline-none"
+            >
+              {areasUnicas.map((a) => (
+                <option key={a._id} value={a._id}>{a.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="text-xs text-muted-foreground">Sector</label>

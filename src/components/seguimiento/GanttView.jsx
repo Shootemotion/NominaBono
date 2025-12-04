@@ -151,6 +151,8 @@ export default function GanttView({
   openHitoModal,
   dueOnly,
   selectedEmpleadoId,
+  hideAreaGroup = false,
+  ganttGrouping = "sector_estado" // "sector_estado" | "estado_sector"
 }) {
   const currentYear = anio || new Date().getFullYear();
   const columns = useMemo(() => buildColumns(currentYear), [currentYear]);
@@ -244,7 +246,15 @@ export default function GanttView({
 
           if (dueOnly && statusKey !== "vencido" && statusKey !== "por_vencer") return;
 
-          const groupKey = `${areaName}||${sectorName}||${statusKey}`;
+          // Determine group key based on ganttGrouping
+          let groupKey;
+          if (ganttGrouping === "estado_sector") {
+            // Group by Status -> Sector (Area ignored or secondary)
+            groupKey = `${statusKey}||${sectorName}||${areaName}`;
+          } else {
+            // Default: Area -> Sector -> Status (or Sector -> Status if Area hidden)
+            groupKey = `${areaName}||${sectorName}||${statusKey}`;
+          }
 
           if (!groupsMap.has(groupKey)) {
             groupsMap.set(groupKey, {
@@ -271,15 +281,29 @@ export default function GanttView({
 
     let rows = Array.from(groupsMap.values());
     rows.sort((a, b) => {
-      if (a.area !== b.area) return a.area.localeCompare(b.area);
-      if (a.sector !== b.sector) return a.sector.localeCompare(b.sector);
-      const orderA = STATUS_CONFIG[a.statusKey]?.order || 99;
-      const orderB = STATUS_CONFIG[b.statusKey]?.order || 99;
-      return orderA - orderB;
+      if (ganttGrouping === "estado_sector") {
+        // Sort by Status Order first
+        const orderA = STATUS_CONFIG[a.statusKey]?.order || 99;
+        const orderB = STATUS_CONFIG[b.statusKey]?.order || 99;
+        if (orderA !== orderB) return orderA - orderB;
+
+        // Then by Sector
+        if (a.sector !== b.sector) return a.sector.localeCompare(b.sector);
+
+        // Then by Area
+        return a.area.localeCompare(b.area);
+      } else {
+        // Default: Area -> Sector -> Status
+        if (a.area !== b.area) return a.area.localeCompare(b.area);
+        if (a.sector !== b.sector) return a.sector.localeCompare(b.sector);
+        const orderA = STATUS_CONFIG[a.statusKey]?.order || 99;
+        const orderB = STATUS_CONFIG[b.statusKey]?.order || 99;
+        return orderA - orderB;
+      }
     });
 
     return rows;
-  }, [grouped, selectedEmpleadoId, dueOnly]);
+  }, [grouped, selectedEmpleadoId, dueOnly, ganttGrouping]);
 
   const [hoverData, setHoverData] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -297,15 +321,36 @@ export default function GanttView({
         <div className="min-w-full">
           {/* HEADER sticky */}
           <div className="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-20 shadow-sm">
-            <div className="w-40 shrink-0 px-3 py-3 font-bold text-slate-600">
-              Área
-            </div>
-            <div className="w-40 shrink-0 px-3 py-3 font-bold text-slate-600 border-l border-slate-200">
-              Sector
-            </div>
-            <div className="w-32 shrink-0 px-3 py-3 font-bold text-slate-600 border-l border-slate-200">
-              Estado
-            </div>
+            {/* Dynamic Headers based on grouping */}
+            {ganttGrouping === "estado_sector" ? (
+              <>
+                <div className="w-32 shrink-0 px-3 py-3 font-bold text-slate-600">
+                  Estado
+                </div>
+                <div className="w-40 shrink-0 px-3 py-3 font-bold text-slate-600 border-l border-slate-200">
+                  Sector
+                </div>
+                {!hideAreaGroup && (
+                  <div className="w-40 shrink-0 px-3 py-3 font-bold text-slate-600 border-l border-slate-200">
+                    Área
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {!hideAreaGroup && (
+                  <div className="w-40 shrink-0 px-3 py-3 font-bold text-slate-600">
+                    Área
+                  </div>
+                )}
+                <div className="w-40 shrink-0 px-3 py-3 font-bold text-slate-600 border-l border-slate-200">
+                  Sector
+                </div>
+                <div className="w-32 shrink-0 px-3 py-3 font-bold text-slate-600 border-l border-slate-200">
+                  Estado
+                </div>
+              </>
+            )}
 
             {/* Bloque de meses: ancho = 12 * 120px */}
             <div className="flex">
@@ -327,7 +372,7 @@ export default function GanttView({
             </div>
           )}
 
-          {processedRows.map((row) => {
+          {processedRows.map((row, index) => {
             const statusConfig =
               STATUS_CONFIG[row.statusKey] || STATUS_CONFIG.pendiente;
 
@@ -338,29 +383,104 @@ export default function GanttView({
             });
             const rowHeight = Math.max(50, maxItemsInCell * 24 + 16);
 
+            // Visual Grouping Logic (Rowspan simulation)
+            const prevRow = index > 0 ? processedRows[index - 1] : null;
+
+            // Check if we should hide the label (visually merge)
+            let hideAreaLabel = false;
+            let hideSectorLabel = false;
+            let hideStatusLabel = false;
+
+            if (ganttGrouping === "estado_sector") {
+              // Grouping: Status -> Sector -> Area
+              if (prevRow && prevRow.statusKey === row.statusKey) {
+                hideStatusLabel = true;
+                if (prevRow.sector === row.sector) {
+                  hideSectorLabel = true;
+                  if (prevRow.area === row.area) {
+                    hideAreaLabel = true;
+                  }
+                }
+              }
+            } else {
+              // Grouping: Area -> Sector -> Status
+              if (prevRow && prevRow.area === row.area) {
+                hideAreaLabel = true;
+                if (prevRow.sector === row.sector) {
+                  hideSectorLabel = true;
+                  // Status is usually the leaf, so we don't merge it unless we want to merge identical statuses in same sector?
+                  // But typically we list all statuses. If we have duplicate statuses (impossible by map key), we'd merge.
+                  // Here, status is the differentiator, so we show it.
+                }
+              }
+            }
+
             return (
               <div
                 key={row.id}
-                className="flex border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+                className={`flex border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${
+                  // Add top border if NOT merged, otherwise remove it to simulate merge? 
+                  // Actually, we keep border-b on all rows, but maybe we can make the internal borders lighter?
+                  ""
+                  }`}
                 style={{ minHeight: rowHeight }}
               >
-                <div className="w-40 shrink-0 px-3 py-2 flex items-center border-r border-slate-100 text-slate-600 font-medium truncate">
-                  <span className="truncate" title={row.area}>
-                    {row.area}
-                  </span>
-                </div>
-                <div className="w-40 shrink-0 px-3 py-2 flex items-center border-r border-slate-100 text-slate-500 truncate">
-                  <span className="truncate" title={row.sector}>
-                    {row.sector}
-                  </span>
-                </div>
-                <div className="w-32 shrink-0 px-3 py-2 flex items-center border-r border-slate-100">
-                  <span
-                    className={`px-2 py-1 rounded text-[10px] font-semibold border ${statusConfig.color} w-full text-center truncate shadow-sm`}
-                  >
-                    {statusConfig.label}
-                  </span>
-                </div>
+                {/* Dynamic Columns based on grouping */}
+                {ganttGrouping === "estado_sector" ? (
+                  <>
+                    <div className={`w-32 shrink-0 px-3 py-2 flex items-center border-r border-slate-100 ${hideStatusLabel ? "" : ""}`}>
+                      {!hideStatusLabel && (
+                        <span
+                          className={`px-2 py-1 rounded text-[10px] font-semibold border ${statusConfig.color} w-full text-center truncate shadow-sm`}
+                        >
+                          {statusConfig.label}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`w-40 shrink-0 px-3 py-2 flex items-center border-r border-slate-100 text-slate-500 truncate ${hideSectorLabel ? "" : ""}`}>
+                      {!hideSectorLabel && (
+                        <span className="truncate" title={row.sector}>
+                          {row.sector}
+                        </span>
+                      )}
+                    </div>
+                    {!hideAreaGroup && (
+                      <div className={`w-40 shrink-0 px-3 py-2 flex items-center border-r border-slate-100 text-slate-600 font-medium truncate ${hideAreaLabel ? "" : ""}`}>
+                        {!hideAreaLabel && (
+                          <span className="truncate" title={row.area}>
+                            {row.area}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {!hideAreaGroup && (
+                      <div className={`w-40 shrink-0 px-3 py-2 flex items-center border-r border-slate-100 text-slate-600 font-medium truncate ${hideAreaLabel ? "" : ""}`}>
+                        {!hideAreaLabel && (
+                          <span className="truncate" title={row.area}>
+                            {row.area}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div className={`w-40 shrink-0 px-3 py-2 flex items-center border-r border-slate-100 text-slate-500 truncate ${hideSectorLabel ? "" : ""}`}>
+                      {!hideSectorLabel && (
+                        <span className="truncate" title={row.sector}>
+                          {row.sector}
+                        </span>
+                      )}
+                    </div>
+                    <div className="w-32 shrink-0 px-3 py-2 flex items-center border-r border-slate-100">
+                      <span
+                        className={`px-2 py-1 rounded text-[10px] font-semibold border ${statusConfig.color} w-full text-center truncate shadow-sm`}
+                      >
+                        {statusConfig.label}
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {/* Bloque de meses de la fila: misma estructura que el header */}
                 <div className="flex h-full">
