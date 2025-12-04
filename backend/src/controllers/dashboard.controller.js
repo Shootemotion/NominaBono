@@ -72,8 +72,7 @@ async function computeForEmployees(empleadoIds, anio) {
         const basePeso = Number(p.pesoBase || 0);
         const peso = (ov && typeof ov.peso === "number")
           ? Number(ov.peso)
-          : basePeso; // (si más adelante metés shares por participaciones, acá se multiplicaría)
-
+          : basePeso;
 
         // 🔹 Generar hitos con resultados ya guardados
         const hitos = await Promise.all(
@@ -99,23 +98,24 @@ async function computeForEmployees(empleadoIds, anio) {
               };
             });
 
-
             return {
               ...h,
               actual: evHito?.actual ?? null,
               comentario: evHito?.comentario ?? "",
               estado: evHito?.estado ?? null,
-              metas: metasCombinadas, // ✅ metas evaluadas por hito
+              metas: metasCombinadas,
             };
           })
         );
 
         if (p.tipo === "objetivo") {
-          // progreso promedio de hitos
+          // progreso promedio de hitos (o max si es acumulativo)
+          const isCumulative = p.metas?.some(m => m.acumulativa || m.modoAcumulacion === 'acumulativo');
           const progresos = hitos.map((h) => h.actual ?? 0);
-          const progreso = progresos.length
-            ? Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length)
-            : 0;
+
+          const progreso = isCumulative
+            ? Math.max(...progresos, 0)
+            : (progresos.length ? Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length) : 0);
 
           objetivosArr.push({
             _id: p._id,
@@ -352,10 +352,12 @@ export const dashByEmpleado = async (req, res, next) => {
       );
 
       if (p.tipo === "objetivo") {
+        const isCumulative = p.metas?.some(m => m.acumulativa || m.modoAcumulacion === 'acumulativo');
         const progresos = hitos.map((h) => h.actual ?? 0);
-        const progreso = progresos.length
-          ? Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length)
-          : 0;
+
+        const progreso = isCumulative
+          ? Math.max(...progresos, 0)
+          : (progresos.length ? Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length) : 0);
 
         objetivosArr.push({
           _id: p._id,

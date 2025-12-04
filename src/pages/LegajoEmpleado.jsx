@@ -48,7 +48,7 @@ const FieldInput = ({ label, type = "text", value, onChange, disabled }) => (
 
 const fmtMoney = (n, cur = "ARS") =>
   (n === null || n === undefined || n === "") ? "—"
-  : new Intl.NumberFormat("es-AR", { style: "currency", currency: cur, maximumFractionDigits: 2 })
+    : new Intl.NumberFormat("es-AR", { style: "currency", currency: cur, maximumFractionDigits: 2 })
       .format(Number(n));
 
 /* ---------- helpers de imagen (mismos que en EmpleadoCard) ---------- */
@@ -145,7 +145,7 @@ export default function LegajoEmpleado() {
     puesto: "",
     area: "",
     sector: "",
-    fechaIngreso: new Date().toISOString().slice(0,10),
+    fechaIngreso: new Date().toISOString().slice(0, 10),
     dni: "",
     cuil: "",
   });
@@ -186,7 +186,7 @@ export default function LegajoEmpleado() {
           puesto: e?.puesto ?? "",
           area: e?.area?._id || e?.area || "",
           sector: e?.sector?._id || e?.sector || "",
-          fechaIngreso: e?.fechaIngreso ? String(e.fechaIngreso).slice(0,10) : new Date().toISOString().slice(0,10),
+          fechaIngreso: e?.fechaIngreso ? String(e.fechaIngreso).slice(0, 10) : new Date().toISOString().slice(0, 10),
           dni: e?.dni ?? "",
           cuil: e?.cuil ?? "",
         });
@@ -208,7 +208,7 @@ export default function LegajoEmpleado() {
           const nombres = p.map((x) => x?.nombre).filter(Boolean);
           if (nombres.length) setPuestos(nombres);
         }
-      } catch {/* noop */}
+      } catch {/* noop */ }
     })();
   }, []);
 
@@ -218,11 +218,11 @@ export default function LegajoEmpleado() {
       try {
         const r = await api(`/empleados/${id}/carrera/resumen`).catch(() => null);
         if (r) setResumeCarrera({ ultimoPuesto: r?.ultimoPuesto || null });
-      } catch {}
+      } catch { }
       try {
         const c = await api(`/empleados/${id}/capacitaciones/resumen`).catch(() => null);
         if (c) setResumeCaps({ total: Number(c?.total || 0), vencen30: Number(c?.vencen30 || 0) });
-      } catch {}
+      } catch { }
     })();
   }, [id]);
 
@@ -232,10 +232,10 @@ export default function LegajoEmpleado() {
       tab === TABS[0]
         ? "informacion-basica"
         : tab === TABS[1]
-        ? "datos-laborales"
-        : tab === TABS[2]
-        ? "capacitaciones"
-        : "documentos";
+          ? "datos-laborales"
+          : tab === TABS[2]
+            ? "capacitaciones"
+            : "documentos";
     setSearchParams((prev) => {
       const p = new URLSearchParams(prev);
       p.set("tab", key);
@@ -410,7 +410,7 @@ export default function LegajoEmpleado() {
                 <div className="text-[11px] text-muted-foreground">Sueldo vigente</div>
                 <div className="text-base font-semibold">{sueldoVigenteTxt}</div>
                 <div className="text-[11px] text-muted-foreground">
-                  Desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0,10) : "—"}
+                  Desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0, 10) : "—"}
                 </div>
               </div>
               <div className="rounded-lg border border-border/60 bg-card p-3">
@@ -464,9 +464,8 @@ export default function LegajoEmpleado() {
                     <button
                       key={t}
                       onClick={() => setTab(t)}
-                      className={`px-3 py-1.5 rounded-md text-sm ring-1 ring-border/60 ${
-                        tab === t ? "bg-background shadow-sm" : "bg-muted hover:bg-muted/70 text-muted-foreground"
-                      }`}
+                      className={`px-3 py-1.5 rounded-md text-sm ring-1 ring-border/60 ${tab === t ? "bg-background shadow-sm" : "bg-muted hover:bg-muted/70 text-muted-foreground"
+                        }`}
                     >
                       {t}
                     </button>
@@ -509,7 +508,7 @@ export default function LegajoEmpleado() {
                             puesto: emp?.puesto ?? "",
                             area: emp?.area?._id || emp?.area || "",
                             sector: emp?.sector?._id || emp?.sector || "",
-                            fechaIngreso: emp?.fechaIngreso ? String(emp.fechaIngreso).slice(0,10) : new Date().toISOString().slice(0,10),
+                            fechaIngreso: emp?.fechaIngreso ? String(emp.fechaIngreso).slice(0, 10) : new Date().toISOString().slice(0, 10),
                             dni: emp?.dni ?? "",
                             cuil: emp?.cuil ?? "",
                           });
@@ -533,7 +532,7 @@ export default function LegajoEmpleado() {
                     <Field label="Puesto" value={emp.puesto || "—"} />
                     <Field label="Área" value={emp?.area?.nombre || "—"} />
                     <Field label="Sector" value={emp?.sector?.nombre || "—"} />
-                    <Field label="Fecha de ingreso" value={emp?.fechaIngreso ? String(emp.fechaIngreso).slice(0,10) : "—"} />
+                    <Field label="Fecha de ingreso" value={emp?.fechaIngreso ? String(emp.fechaIngreso).slice(0, 10) : "—"} />
                     <Field label="DNI" value={emp?.dni || "—"} />
                     <Field label="CUIL" value={emp?.cuil || "—"} />
                   </div>
@@ -606,103 +605,106 @@ export default function LegajoEmpleado() {
             )}
 
             {/* Datos laborales */}
+            {/* Datos laborales */}
             {tab === "Datos laborales" && (
               <>
-                <div className="rounded-xl bg-card ring-1 ring-border/60 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold">Sueldo base</h3>
-                  </div>
+                {isRRHH && (
+                  <div className="rounded-xl bg-card ring-1 ring-border/60 p-4 mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold">Sueldo base</h3>
+                    </div>
 
-                  {/* ACTUAL */}
-                  <div className="rounded-lg border border-border/60 bg-muted/20 p-3 mb-4 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Sueldo actual</div>
-                      <div className="text-xl font-semibold">
-                        {fmtMoney(emp?.sueldoBase?.monto, emp?.sueldoBase?.moneda)}
+                    {/* ACTUAL */}
+                    <div className="rounded-lg border border-border/60 bg-muted/20 p-3 mb-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Sueldo actual</div>
+                        <div className="text-xl font-semibold">
+                          {fmtMoney(emp?.sueldoBase?.monto, emp?.sueldoBase?.moneda)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Vigente desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0, 10) : "—"}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Vigente desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0,10) : "—"}
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Vigente</span>
+                    </div>
+
+                    {/* FORM ACTUALIZAR */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <FieldInput
+                        label="Monto"
+                        type="number"
+                        value={sueldo.monto}
+                        onChange={(v) => setSueldo((s) => ({ ...s, monto: v }))}
+                        disabled={!isRRHH}
+                      />
+                      <div>
+                        <Label>Moneda</Label>
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+                          value={sueldo.moneda}
+                          onChange={(e) => setSueldo((s) => ({ ...s, moneda: e.target.value }))}
+                          disabled={!isRRHH}
+                        >
+                          <option>ARS</option>
+                          <option>USD</option>
+                        </select>
+                      </div>
+                      <FieldInput
+                        label="Vigente desde"
+                        type="date"
+                        value={sueldo.vigenteDesde}
+                        onChange={(v) => setSueldo((s) => ({ ...s, vigenteDesde: v }))}
+                        disabled={!isRRHH}
+                      />
+                      <div className="flex items-end">
+                        <button
+                          disabled={!isRRHH}
+                          onClick={onGuardarSueldo}
+                          className="w-full rounded-md px-3 py-2 text-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          Actualizar sueldo
+                        </button>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Vigente</span>
-                  </div>
 
-                  {/* FORM ACTUALIZAR */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <FieldInput
-                      label="Monto"
-                      type="number"
-                      value={sueldo.monto}
-                      onChange={(v) => setSueldo((s) => ({ ...s, monto: v }))}
-                      disabled={!isRRHH}
-                    />
-                    <div>
-                      <Label>Moneda</Label>
-                      <select
-                        className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
-                        value={sueldo.moneda}
-                        onChange={(e) => setSueldo((s) => ({ ...s, moneda: e.target.value }))}
-                        disabled={!isRRHH}
-                      >
-                        <option>ARS</option>
-                        <option>USD</option>
-                      </select>
-                    </div>
-                    <FieldInput
-                      label="Vigente desde"
-                      type="date"
-                      value={sueldo.vigenteDesde}
-                      onChange={(v) => setSueldo((s) => ({ ...s, vigenteDesde: v }))}
-                      disabled={!isRRHH}
-                    />
-                    <div className="flex items-end">
-                      <button
-                        disabled={!isRRHH}
-                        onClick={onGuardarSueldo}
-                        className="w-full rounded-md px-3 py-2 text-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        Actualizar sueldo
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* HISTÓRICO */}
-                  <div className="mt-4">
-                    <div className="text-[11px] text-muted-foreground mb-1">Histórico (no incluye el vigente)</div>
-                    <div className="overflow-x-auto">
-                      <div className="max-h-56 overflow-y-auto rounded-lg border border-border/60">
-                        <table className="min-w-[560px] w-full text-sm table-auto">
-                          <thead className="sticky top-0 bg-muted/40">
-                            <tr className="text-[11px] uppercase text-muted-foreground">
-                              <th className="text-left px-3 py-2">Desde</th>
-                              <th className="text-left px-3 py-2">Hasta</th>
-                              <th className="text-left px-3 py-2">Monto</th>
-                              <th className="text-left px-3 py-2">Moneda</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {historico.length ? (
-                              historico.map((h, i) => (
-                                <tr key={i} className="border-t border-border/50 odd:bg-background even:bg-muted/20">
-                                  <td className="px-3 py-2">{h?.desde ? String(h.desde).slice(0,10) : "—"}</td>
-                                  <td className="px-3 py-2">{h?.hasta ? String(h.hasta).slice(0,10) : "—"}</td>
-                                  <td className="px-3 py-2">{fmtMoney(h?.monto, h?.moneda)}</td>
-                                  <td className="px-3 py-2">{h?.moneda ?? "—"}</td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr>
-                                <td className="px-3 py-2 text-sm text-muted-foreground" colSpan={4}>
-                                  Sin registros previos.
-                                </td>
+                    {/* HISTÓRICO */}
+                    <div className="mt-4">
+                      <div className="text-[11px] text-muted-foreground mb-1">Histórico (no incluye el vigente)</div>
+                      <div className="overflow-x-auto">
+                        <div className="max-h-56 overflow-y-auto rounded-lg border border-border/60">
+                          <table className="min-w-[560px] w-full text-sm table-auto">
+                            <thead className="sticky top-0 bg-muted/40">
+                              <tr className="text-[11px] uppercase text-muted-foreground">
+                                <th className="text-left px-3 py-2">Desde</th>
+                                <th className="text-left px-3 py-2">Hasta</th>
+                                <th className="text-left px-3 py-2">Monto</th>
+                                <th className="text-left px-3 py-2">Moneda</th>
                               </tr>
-                            )}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {historico.length ? (
+                                historico.map((h, i) => (
+                                  <tr key={i} className="border-t border-border/50 odd:bg-background even:bg-muted/20">
+                                    <td className="px-3 py-2">{h?.desde ? String(h.desde).slice(0, 10) : "—"}</td>
+                                    <td className="px-3 py-2">{h?.hasta ? String(h.hasta).slice(0, 10) : "—"}</td>
+                                    <td className="px-3 py-2">{fmtMoney(h?.monto, h?.moneda)}</td>
+                                    <td className="px-3 py-2">{h?.moneda ?? "—"}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td className="px-3 py-2 text-sm text-muted-foreground" colSpan={4}>
+                                    Sin registros previos.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Carrera / Historial de puestos */}
                 <div className="rounded-xl bg-card ring-1 ring-border/60 p-4">

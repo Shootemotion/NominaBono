@@ -61,7 +61,7 @@ function parsePeriodoToDate(periodoStr) {
 
 function getHybridStatus(sourceData, fechaRef) {
   const dbStatus = sourceData?.estado;
-  if (dbStatus && dbStatus !== "MANAGER_DRAFT") return dbStatus;
+  if (dbStatus && dbStatus !== "MANAGER_DRAFT" && dbStatus !== "PENDIENTE") return dbStatus;
   if (!fechaRef) return "pendiente";
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -111,7 +111,7 @@ export default function GanttView({
       else if (item.empleado) itemEmployees = [item.empleado];
 
       itemEmployees.forEach((emp) => {
-               if (!emp || !emp._id) return;
+        if (!emp || !emp._id) return;
         if (selectedEmpleadoId && String(emp._id) !== String(selectedEmpleadoId)) return;
 
         const areaName = emp.area?.nombre || "Sin Área";

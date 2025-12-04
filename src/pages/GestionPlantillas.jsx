@@ -1,5 +1,6 @@
 // src/pages/GestionPlantillas.jsx
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import usePlantillas from "@/hooks/usePlantillas";
 import PlantillasList from "@/components/PlantillasList";
@@ -19,7 +20,7 @@ async function fetchAll(path, { pageSize = 200, params = {} } = {}) {
   const baseQS = new URLSearchParams(existing || "");
   Object.entries(params).forEach(([k, v]) => baseQS.set(k, String(v)));
 
-  for (;;) {
+  for (; ;) {
     const qs = new URLSearchParams(baseQS);
     qs.set("page", String(page));
     qs.set("pageSize", String(pageSize));
@@ -31,10 +32,10 @@ async function fetchAll(path, { pageSize = 200, params = {} } = {}) {
       Array.isArray(data)
         ? data
         : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.docs)
-        ? data.docs
-        : [];
+          ? data.items
+          : Array.isArray(data?.docs)
+            ? data.docs
+            : [];
 
     out.push(...chunk);
 
@@ -61,14 +62,14 @@ const normAny = (res) =>
   Array.isArray(res)
     ? res
     : Array.isArray(res?.data)
-    ? res.data
-    : Array.isArray(res?.items)
-    ? res.items
-    : Array.isArray(res?.results)
-    ? res.results
-    : Array.isArray(res?.rows)
-    ? res.rows
-    : [];
+      ? res.data
+      : Array.isArray(res?.items)
+        ? res.items
+        : Array.isArray(res?.results)
+          ? res.results
+          : Array.isArray(res?.rows)
+            ? res.rows
+            : [];
 
 const MAX_LIST = 2000;
 
@@ -81,6 +82,7 @@ const qsFromObj = (o) =>
 
 export default function GestionPlantillasPage() {
   const { user } = useAuth();
+  const nav = useNavigate();
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
@@ -92,7 +94,7 @@ export default function GestionPlantillasPage() {
   const [scopeId, setScopeId] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("todos"); // todos | activas
   // dentro del componente
-const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Modales
   const [formOpen, setFormOpen] = useState(false);
@@ -140,8 +142,8 @@ const [refreshKey, setRefreshKey] = useState(0);
     [empQuerySidebar, empleados]
   );
 
-  
-     // cerrar dropdowns al click afuera
+
+  // cerrar dropdowns al click afuera
   useEffect(() => {
     function handleClickOutside(ev) {
       const target = ev.target;
@@ -275,12 +277,12 @@ const [refreshKey, setRefreshKey] = useState(0);
       scopeId: scopeId || undefined,
       tipoFiltro,
     }),
-    [year, scopeType, scopeId, tipoFiltro,refreshKey]
+    [year, scopeType, scopeId, tipoFiltro, refreshKey]
   );
   const hook = usePlantillas(hookParams);
   const { loading, reload, addLocal, updateLocal, removeLocal } = hook;
 
-    const [plantillasByEmpRaw, setPlantillasByEmpRaw] = useState(null); // sin filtrar por overrides
+  const [plantillasByEmpRaw, setPlantillasByEmpRaw] = useState(null); // sin filtrar por overrides
   const [plantillasSector, setPlantillasSector] = useState(null); // cascada sector+área
   const [allPlantillas, setAllPlantillas] = useState(null); // modo “todas”
   const [empOverrides, setEmpOverrides] = useState([]); // overrides del empleado/año
@@ -290,14 +292,14 @@ const [refreshKey, setRefreshKey] = useState(0);
     Array.isArray(res)
       ? res
       : Array.isArray(res?.data)
-      ? res.data
-      : Array.isArray(res?.items)
-      ? res.items
-      : Array.isArray(res?.results)
-      ? res.results
-      : Array.isArray(res?.rows)
-      ? res.rows
-      : [];
+        ? res.data
+        : Array.isArray(res?.items)
+          ? res.items
+          : Array.isArray(res?.results)
+            ? res.results
+            : Array.isArray(res?.rows)
+              ? res.rows
+              : [];
 
   // 🔁 Cascada: SECTOR -> sector + área padre (solo si NO hay empleado)
   useEffect(() => {
@@ -355,7 +357,7 @@ const [refreshKey, setRefreshKey] = useState(0);
         setPlantillasSector([]);
       }
     })();
-  }, [year, scopeType, scopeId, empleadoId, sectores,refreshKey]);
+  }, [year, scopeType, scopeId, empleadoId, sectores, refreshKey]);
 
 
   // 🔁 Empleado: empleado + sector + área (sin aplicar overrides todavía)
@@ -421,7 +423,7 @@ const [refreshKey, setRefreshKey] = useState(0);
         setPlantillasByEmpRaw([]);
       }
     })();
-  }, [empleadoId, selectedEmpleado, year,refreshKey]);
+  }, [empleadoId, selectedEmpleado, year, refreshKey]);
 
   // Aplica overrides del empleado a las plantillas heredadas (oculta excluidas y marca overrides)
   const plantillasByEmp = useMemo(() => {
@@ -462,7 +464,7 @@ const [refreshKey, setRefreshKey] = useState(0);
 
     // 💥 acá se ocultan los excluidos
     return withOv.filter((tpl) => !tpl.__excluido);
-  }, [plantillasByEmpRaw, empOverrides, empleadoId, year,refreshKey]);
+  }, [plantillasByEmpRaw, empOverrides, empleadoId, year, refreshKey]);
 
   // 🔁 Fallback: TODAS (unión area/sector/empleado) cuando no hay alcance ni empleado
   useEffect(() => {
@@ -500,11 +502,11 @@ const [refreshKey, setRefreshKey] = useState(0);
         setAllPlantillas([]);
       }
     })();
-  }, [year, tipoFiltro, empleadoId, scopeType, scopeId,refreshKey]);
+  }, [year, tipoFiltro, empleadoId, scopeType, scopeId, refreshKey]);
 
 
 
-    // Overrides específicos del empleado seleccionado
+  // Overrides específicos del empleado seleccionado
   useEffect(() => {
     (async () => {
       if (!empleadoId) {
@@ -525,7 +527,7 @@ const [refreshKey, setRefreshKey] = useState(0);
         setEmpOverrides([]);
       }
     })();
-  }, [empleadoId, year,refreshKey ]);
+  }, [empleadoId, year, refreshKey]);
 
   const plantillas = useMemo(() => {
     if (plantillasByEmp !== null) return plantillasByEmp;
@@ -579,34 +581,34 @@ const [refreshKey, setRefreshKey] = useState(0);
     setCloneOpen(true);
   };
 
-const handleAfterSave = (tpl) => {
-  if (editing?._id) {
-    updateLocal(tpl);
-  } else {
-    addLocal(tpl);
-  }
+  const handleAfterSave = (tpl) => {
+    if (editing?._id) {
+      updateLocal(tpl);
+    } else {
+      addLocal(tpl);
+    }
 
-  setEditing(null);
-  setModalFormType(null);
-  setFormOpen(false);
+    setEditing(null);
+    setModalFormType(null);
+    setFormOpen(false);
 
-  setRefreshKey((k) => k + 1);  // 👈 dispara refetch en todos
-  reload();                     // 👈 refresca el hook usePlantillas
-};
+    setRefreshKey((k) => k + 1);  // 👈 dispara refetch en todos
+    reload();                     // 👈 refresca el hook usePlantillas
+  };
 
-const handleDelete = async (tpl) => {
-  if (!confirm(`¿Eliminar plantilla "${tpl.nombre}"?`)) return;
-  try {
-    await api(`/templates/${tpl._id}`, { method: "DELETE" });
-    removeLocal(tpl._id);
+  const handleDelete = async (tpl) => {
+    if (!confirm(`¿Eliminar plantilla "${tpl.nombre}"?`)) return;
+    try {
+      await api(`/templates/${tpl._id}`, { method: "DELETE" });
+      removeLocal(tpl._id);
 
-    setRefreshKey((k) => k + 1);
-    reload();
-    // 👆 el toast de éxito lo dejás en PlantillasList si querés uno solo
-  } catch {
-    toast.error("No se pudo eliminar");
-  }
-};
+      setRefreshKey((k) => k + 1);
+      reload();
+      // 👆 el toast de éxito lo dejás en PlantillasList si querés uno solo
+    } catch {
+      toast.error("No se pudo eliminar");
+    }
+  };
   const clearAlcance = () => {
     setScopeType("");
     setScopeId("");
@@ -660,6 +662,10 @@ const handleDelete = async (tpl) => {
               Creá y administrá objetivos y aptitudes base por Año y Alcance.
             </p>
           </div>
+          <Button onClick={() => nav("/simulador")} variant="outline" className="gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-calculator"><rect width="16" height="20" x="4" y="2" rx="2" /><line x1="8" x2="16" y1="6" y2="6" /><line x1="16" x2="16" y1="14" y2="18" /><path d="M16 10h.01" /><path d="M12 10h.01" /><path d="M8 10h.01" /><path d="M12 14h.01" /><path d="M8 14h.01" /><path d="M12 18h.01" /><path d="M8 18h.01" /></svg>
+            Simulador
+          </Button>
         </div>
 
         {/* Layout: sidebar + main */}
@@ -763,11 +769,10 @@ const handleDelete = async (tpl) => {
                   >
                     <div className="flex items-center justify-between px-3 py-2">
                       <button
-                        className={`w-full text-left font-medium rounded-md px-2 py-1 transition-all ${
-                          isActiveScope("area", area._id)
+                        className={`w-full text-left font-medium rounded-md px-2 py-1 transition-all ${isActiveScope("area", area._id)
                             ? "bg-primary/10 text-primary"
                             : "hover:bg-muted/60"
-                        } hover:ring-1 hover:ring-primary/20`}
+                          } hover:ring-1 hover:ring-primary/20`}
                         onClick={() => {
                           setScopeType("area");
                           setScopeId(area._id);
@@ -791,11 +796,10 @@ const handleDelete = async (tpl) => {
                           <li key={sector._id} className="rounded-md">
                             <div className="flex items-center justify-between gap-1">
                               <button
-                                className={`w-full text-left text-sm rounded-md px-3 py-1.5 transition-all ${
-                                  isActiveScope("sector", sector._id)
+                                className={`w-full text-left text-sm rounded-md px-3 py-1.5 transition-all ${isActiveScope("sector", sector._id)
                                     ? "bg-primary/10 text-primary"
                                     : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                } hover:ring-1 hover:ring-primary/20`}
+                                  } hover:ring-1 hover:ring-primary/20`}
                                 onClick={() => {
                                   setScopeType("sector");
                                   setScopeId(sector._id);
@@ -859,11 +863,10 @@ const handleDelete = async (tpl) => {
                     {[year - 1, year, year + 1].map((y) => (
                       <button
                         key={y}
-                        className={`px-3 py-1 rounded-full text-sm ${
-                          year === y
+                        className={`px-3 py-1 rounded-full text-sm ${year === y
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted"
-                        }`}
+                          }`}
                         onClick={() => setYear(y)}
                       >
                         {y}
@@ -871,7 +874,7 @@ const handleDelete = async (tpl) => {
                     ))}
                   </div>
 
-                
+
 
 
                   {/* Bloque derecho: buscador empleado header + extras */}
@@ -1095,12 +1098,12 @@ const handleDelete = async (tpl) => {
                 nombre: cloneTpl.nombre,
                 proceso: cloneTpl.proceso,
               };
-           await api("/templates", { method: "POST", body });
-await reload();
-setRefreshKey((k) => k + 1);
+              await api("/templates", { method: "POST", body });
+              await reload();
+              setRefreshKey((k) => k + 1);
 
-setCloneOpen(false);
-setCloneTpl(null);
+              setCloneOpen(false);
+              setCloneTpl(null);
             } catch (e) {
               console.error(e);
               toast.error("No se pudo clonar");

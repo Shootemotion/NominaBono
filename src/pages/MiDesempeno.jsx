@@ -1,767 +1,725 @@
-// src/pages/MiDesempeno.jsx
-import { useCallback, useEffect, useMemo, useState, useDeferredValue, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/context/AuthContext";
 import { dashEmpleado } from "@/lib/dashboard";
 import { api } from "@/lib/api";
-import HistorialEvaluacion from "@/components/HistorialEvaluacion";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+  MessageSquare,
+  CheckCircle2,
+  AlertCircle,
+  Lock,
+  Calendar,
+  UserCircle2,
+  Target,
+  Lightbulb,
+  ChevronDown,
+  ChevronUp,
+  LayoutDashboard,
+  ListChecks,
+  FileSignature,
+  Info,
+  BarChart3,
+  Hourglass
+} from "lucide-react";
 
 // === UI helpers ===
-const Pill = ({ children, title }) => (
-  <span
-    title={title}
-    className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 text-[11px] px-2 py-0.5"
-  >
-    {children}
-  </span>
-);
+const StatusBadge = ({ status }) => {
+  const styles = {
+    "SENT": "bg-blue-50 text-blue-700 border-blue-200",
+    "REALIZADO": "bg-blue-50 text-blue-700 border-blue-200", // Mapped to SENT style
+    "ACKNOWLEDGED": "bg-purple-50 text-purple-700 border-purple-200",
+    "CLOSED": "bg-slate-100 text-slate-600 border-slate-200",
+    "PENDIENTE": "bg-amber-50 text-amber-700 border-amber-200",
+    "DRAFT": "bg-amber-50 text-amber-700 border-amber-200"
+  };
 
-const SectionTitle = ({ children, right }) => (
-  <div className="flex items-center justify-between mb-1">
-    <h3 className="text-sm font-semibold">{children}</h3>
-    {right}
-  </div>
-);
+  const labels = {
+    "SENT": "Enviado",
+    "REALIZADO": "Enviado",
+    "ACKNOWLEDGED": "En RRHH",
+    "CLOSED": "Cerrado",
+    "PENDIENTE": "Borrador",
+    "DRAFT": "Borrador"
+  };
 
-const ProgressBar = ({ value = 0 }) => (
-  <div className="w-full h-2.5 rounded-full bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden shadow-inner">
-    <div
-      className="h-full transition-[width] duration-300 bg-gradient-to-r from-indigo-500 to-indigo-400"
-      style={{ width: `${Math.max(0, Math.min(100, Math.round(value)))}%` }}
-    />
-  </div>
-);
+  return (
+    <Badge variant="outline" className={`${styles[status] || styles["PENDIENTE"]} font-medium`}>
+      {labels[status] || "Pendiente"}
+    </Badge>
+  );
+};
+
+// === Objective Card Component (Refined) ===
+const ObjectiveCard = ({ obj, currentPeriod, expanded, onToggle }) => {
+  const [selectedPeriod, setSelectedPeriod] = useState(currentPeriod);
+
+  useEffect(() => {
+    setSelectedPeriod(currentPeriod);
+  }, [currentPeriod]);
+
+  // Find current hito for the selected period
+  const currentHito = obj.hitos?.find(h => h.periodo === selectedPeriod);
+  const hasResult = currentHito?.actual !== null && currentHito?.actual !== undefined;
+
+  // Helper for hito status color
+  const getHitoColorClass = (h) => {
+    if (h.actual !== null) return "bg-emerald-50 border-emerald-200 text-emerald-700";
+    if (h.periodo === currentPeriod) return "bg-blue-50 border-blue-200 text-blue-700 ring-1 ring-blue-300";
+    return "bg-slate-50 border-slate-100 text-slate-400";
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
+      {/* Card Header (Clickable for Expand/Collapse) */}
+      <div
+        className="p-5 cursor-pointer hover:bg-slate-50/50 transition-colors"
+        onClick={onToggle}
+      >
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex-1 pr-4">
+            <div className="flex items-center gap-3 mb-2 text-xs text-slate-500">
+              <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 font-normal flex items-center gap-1">
+                <Hourglass className="w-3 h-3" /> {obj.frecuencia || "Anual"}
+              </Badge>
+              <span>Peso: <span className="font-bold text-slate-700">{obj.peso}%</span></span>
+            </div>
+            <h4 className="font-bold text-slate-800 text-base leading-tight">{obj.nombre}</h4>
+          </div>
+          <div className="text-right min-w-[80px] flex flex-col items-end">
+            <div className="flex items-center gap-2">
+              <div className={`text-2xl font-black ${obj.progreso > 0 ? 'text-blue-600' : 'text-slate-300'}`}>
+                {Math.round(obj.progreso)}%
+              </div>
+              {expanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+            </div>
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Progreso</div>
+          </div>
+        </div>
+
+        {/* Cronograma de Hitos (Always Visible or Collapsible? User said "objetivos deberian poder colapzar") 
+            Let's keep the header visible and collapse the details below.
+        */}
+      </div>
+
+      {/* Collapsible Content */}
+      {expanded && (
+        <div className="px-5 pb-5 animate-in slide-in-from-top-2">
+          {/* Cronograma de Hitos (Boxes) */}
+          <div className="mb-6 border-t border-slate-100 pt-4">
+            <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block tracking-wider">Cronograma de Hitos</label>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {obj.hitos?.map((h) => {
+                const colorClass = getHitoColorClass(h);
+                const isSelected = h.periodo === selectedPeriod;
+                return (
+                  <div
+                    key={h.periodo}
+                    onClick={(e) => { e.stopPropagation(); setSelectedPeriod(h.periodo); }}
+                    className={`flex flex-col items-center justify-center p-2 rounded border min-w-[70px] transition-all cursor-pointer ${colorClass} ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'opacity-70 hover:opacity-100'}`}
+                  >
+                    <span className="text-[10px] font-bold uppercase">{h.periodo}</span>
+                    <span className="text-xs font-semibold">{h.actual !== null ? `${Math.round(h.actual)}%` : "-"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Current Period Evaluation Box */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm mb-4">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-600">Evaluando Período:</span>
+                <Badge className="bg-slate-900 text-white hover:bg-slate-800">{selectedPeriod}</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-600">Score Hito:</span>
+                <span className={`text-lg font-bold ${hasResult ? 'text-emerald-600' : 'text-slate-300'}`}>
+                  {hasResult ? `${Number(currentHito.actual).toFixed(1)}%` : "0.0%"}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Metas / KPI */}
+              {/* Metas / KPI */}
+              <div className="space-y-3">
+                {currentHito?.metas?.map((meta, idx) => (
+                  <div key={idx} className="pb-3 border-b border-slate-50 last:border-0 last:pb-0">
+                    <div className="text-sm text-slate-700 font-medium mb-1">{meta.nombre || "Meta sin descripción"}</div>
+                    <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                      <span className="bg-slate-100 px-2 py-1 rounded">
+                        Esperado: {meta.esperado !== null ? meta.esperado : "N/A"} {meta.unidad}
+                      </span>
+                      {obj.metas?.[idx]?.modoAcumulacion === "acumulativo" && (
+                        <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">Acumulativo</span>
+                      )}
+                      {obj.metas?.[idx]?.reglaCierre && (
+                        <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded border border-indigo-100">
+                          Cierre: {obj.metas?.[idx]?.reglaCierre}
+                        </span>
+                      )}
+                      {obj.metas?.[idx]?.reconoceEsfuerzo && (
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">Reconoce Esfuerzo</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {(!currentHito?.metas || currentHito.metas.length === 0) && (
+                  <div className="text-sm text-slate-400 italic">Sin metas definidas para este hito.</div>
+                )}
+              </div>
+
+              {/* Result Input Display (Read Only) */}
+              <div className="flex justify-end">
+                <div className="w-32">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Resultado</label>
+                  <div className="h-9 w-full rounded border border-slate-200 bg-slate-50 flex items-center px-3 text-sm text-slate-600 font-medium">
+                    {hasResult ? currentHito.actual : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Evaluator Comment */}
+          <div className="rounded-lg border border-slate-200 p-4 bg-slate-50/50">
+            <label className="text-[10px] font-bold text-slate-500 uppercase mb-2 block">Comentario del Evaluador</label>
+            <p className="text-sm text-slate-600 italic leading-relaxed">
+              {currentHito?.comentario || "Sin comentarios."}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function MiDesempeno() {
   const { user } = useAuth();
+  const empleadoNombre = user?.empleado?.nombre || user?.empleadoId?.nombre || user?.nombre || "Colaborador";
+  const empleadoId = user?.empleado?._id || user?.empleadoId?._id || user?.empleadoId || user?._id;
 
   const [data, setData] = useState(null);
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [expandedItems, setExpandedItems] = useState({}); // { [id]: boolean }
 
-  const [tab, setTab] = useState("todos");
-  const [q, setQ] = useState("");
-  const dq = useDeferredValue(q);
-  const [selected, setSelected] = useState(null);
-  const [periodoSel, setPeriodoSel] = useState(null);
+  // Refs for scrolling
+  const sectionFeedbackRef = useRef(null);
+  const sectionDetailsRef = useRef(null);
+  const sectionValidationRef = useRef(null);
 
-  const [evalsEmpleado, setEvalsEmpleado] = useState([]);
-  const [evalActual, setEvalActual] = useState(null);
+  // Estado local para comentarios/ack antes de guardar
+  const [localComment, setLocalComment] = useState("");
+  const [localAck, setLocalAck] = useState(null);
 
-  const searchRef = useRef(null);
-  useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
 
-const empleadoIdFromUser = (u) =>
-  u?.empleadoId?._id || u?.empleadoId || null;
-  // ===== Resumen cabecera
-  const resumenAnual = useMemo(() => {
-    if (!data) return null;
-    const objetivos = Array.isArray(data.objetivos) ? data.objetivos : [];
-    const aptitudes = Array.isArray(data.aptitudes) ? data.aptitudes : [];
 
-    const pesos = objetivos.map((o) => Number(o.peso ?? o.pesoBase ?? 0));
-    const prog = objetivos.map((o) => Number(o.progreso ?? 0));
-    const totalPeso = pesos.reduce((a, b) => a + b, 0) || 0;
-
-    const scoreObj =
-      totalPeso > 0
-        ? pesos.reduce((acc, p, i) => acc + p * (prog[i] || 0), 0) / totalPeso
-        : prog.length
-        ? prog.reduce((a, b) => a + b, 0) / prog.length
-        : 0;
-
-    const punt = aptitudes.map((a) => Number(a.puntuacion ?? a.score ?? 0));
-    const scoreApt = punt.length ? punt.reduce((a, b) => a + b, 0) / punt.length : 0;
-
-    const global = (scoreObj + scoreApt) / 2;
-    return {
-      objetivos: { cantidad: objetivos.length, peso: totalPeso, score: scoreObj },
-      aptitudes: { cantidad: aptitudes.length, score: scoreApt },
-      global,
-    };
-  }, [data]);
-
-  // ===== Data dashboard
+  // 1. Cargar Dashboard (Objetivos/Aptitudes)
   const fetchDash = useCallback(async () => {
-    const empleadoId = empleadoIdFromUser(user);
-    if (!empleadoId) {
-      toast.error("Falta referencia a la ficha del empleado en tu usuario.");
-      return;
-    }
+    if (!empleadoId) return;
     try {
       setLoading(true);
-      const res = await dashEmpleado(empleadoId);
-      if (!res) {
-        toast.error("Empleado no encontrado.");
-        setData(null);
-        return;
+      const currentYear = new Date().getFullYear();
+      const res = await dashEmpleado(empleadoId, currentYear);
+      if (res) {
+        const normalized = { ...res };
+        if (normalized.objetivos?.items && !Array.isArray(normalized.objetivos)) {
+          normalized.objetivos = normalized.objetivos.items;
+        }
+        if (normalized.aptitudes?.items && !Array.isArray(normalized.aptitudes)) {
+          normalized.aptitudes = normalized.aptitudes.items;
+        }
+        setData(normalized);
       }
-      const normalized = { ...res };
-      if (normalized.objetivos?.items && !Array.isArray(normalized.objetivos)) {
-        normalized.objetivos = normalized.objetivos.items;
-      }
-      if (normalized.aptitudes?.items && !Array.isArray(normalized.aptitudes)) {
-        normalized.aptitudes = normalized.aptitudes.items;
-      }
-      setData(normalized);
     } catch (err) {
       console.error(err);
-      toast.error("No pude cargar tu desempeño.");
-      setData(null);
+      toast.error("Error al cargar datos.");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [empleadoId]);
+
+  // 2. Cargar Feedbacks
+  const fetchFeedbacks = useCallback(async () => {
+    if (!empleadoId) return;
+    try {
+      const res = await api(`/feedbacks/empleado/${empleadoId}`);
+      const fetched = Array.isArray(res) ? res : [];
+
+      // Generar lista completa de 4 periodos para asegurar que siempre se vean
+      const currentYear = new Date().getFullYear();
+      const periods = ["Q1", "Q2", "Q3", "FINAL"];
+
+      const fullList = periods.map(p => {
+        const found = fetched.find(f => f.periodo === p);
+        if (found) return found;
+
+        // Si no existe, crear placeholder
+        return {
+          _id: `placeholder-${p}`,
+          periodo: p,
+          year: currentYear,
+          estado: "PENDIENTE",
+          comentario: "",
+          isPlaceholder: true
+        };
+      });
+
+      setFeedbacks(fullList);
+
+      // Seleccionar el primero si no hay selección
+      if (fullList.length > 0 && !selectedFeedback) {
+        // Intentar seleccionar el más reciente que no sea placeholder, o el primero
+        const lastReal = [...fullList].reverse().find(f => !f.isPlaceholder);
+        setSelectedFeedback(lastReal || fullList[0]);
+      }
+    } catch (err) {
+      console.error("Error fetching feedbacks:", err);
+    }
+  }, [empleadoId, selectedFeedback]);
 
   useEffect(() => {
     fetchDash();
-  }, [fetchDash]);
+    fetchFeedbacks();
+  }, [fetchDash, fetchFeedbacks]);
 
-  // ===== Evaluaciones del empleado
+  // Sincronizar estado local al cambiar selección
   useEffect(() => {
-    (async () => {
-      const empleadoId = empleadoIdFromUser(user);
-      if (!empleadoId) return;
-      try {
-        const ev = await api(`/evaluaciones?empleado=${empleadoId}`);
-        const arr = Array.isArray(ev) ? ev : ev?.items || [];
-        setEvalsEmpleado(arr);
-      } catch (e) {
-        console.error(e);
-      }
-    })();
-  }, [user]);
+    if (selectedFeedback) {
+      setLocalComment(selectedFeedback.comentarioEmpleado || "");
+      setLocalAck(selectedFeedback.empleadoAck?.estado || null);
+    }
+  }, [selectedFeedback]);
 
-  // ===== Detalle por selección + periodo
-  useEffect(() => {
-    const loadEvalDetalle = async () => {
-      if (!selected || !periodoSel) {
-        setEvalActual(null);
-        return;
+  // Calcular resultados para el periodo seleccionado
+  const periodResults = useMemo(() => {
+    if (!data || !selectedFeedback) return { objetivos: [], aptitudes: [], scores: { obj: 0, comp: 0, global: 0 } };
+    const p = selectedFeedback.periodo;
+
+    let totalObjScore = 0;
+    let totalObjWeight = 0;
+    let totalCompScore = 0;
+    let totalCompWeight = 0;
+
+    const mapItems = (items, type) => {
+      return items.map(it => {
+        const hito = it.hitos?.find(h => h.periodo === p);
+        const score = hito?.actual ?? 0;
+
+        if (type === 'obj') {
+          totalObjScore += Number(score) * (it.peso || 0);
+          totalObjWeight += (it.peso || 0);
+        } else {
+          totalCompScore += Number(score) * (it.peso || 0);
+          totalCompWeight += (it.peso || 0);
+        }
+
+        return {
+          ...it,
+          hitoActual: hito,
+          scorePeriodo: score
+        };
+      });
+    };
+
+    const objetivos = mapItems(data.objetivos || [], 'obj');
+    const aptitudes = mapItems(data.aptitudes || [], 'comp');
+
+    const scoreObj = totalObjWeight > 0 ? (totalObjScore / totalObjWeight) : 0;
+    const scoreComp = totalCompWeight > 0 ? (totalCompScore / totalCompWeight) : 0;
+
+    // Asumimos 80/20 si no hay config global
+    const wObj = 80;
+    const wComp = 20;
+    const global = ((scoreObj * wObj) + (scoreComp * wComp)) / (wObj + wComp);
+
+    return {
+      objetivos,
+      aptitudes,
+      scores: {
+        obj: scoreObj,
+        comp: scoreComp,
+        global
       }
-      const base = evalsEmpleado.find((ev) => {
-        const plantillaId = String(ev.plantillaId?._id || ev.plantillaId);
-        const periodo = String(ev.periodo).trim();
-        return (
-          plantillaId === String(selected._id) && periodo === String(periodoSel).trim()
-        );
+    };
+  }, [data, selectedFeedback]);
+
+  // Guardar respuesta (Ack/Comment)
+  const handleSaveResponse = async () => {
+    if (!selectedFeedback) return;
+    try {
+      const payload = {
+        empleado: empleadoId,
+        year: selectedFeedback.year,
+        periodo: selectedFeedback.periodo,
+        estado: selectedFeedback.estado === "SENT" ? "ACKNOWLEDGED" : selectedFeedback.estado,
+        comentario: selectedFeedback.comentario,
+        comentarioEmpleado: localComment,
+        empleadoAck: {
+          estado: localAck,
+          fecha: new Date()
+        }
+      };
+
+      await api("/feedback", {
+        method: "POST",
+        body: payload
       });
 
-      if (base?._id) {
-        try {
-          const detalle = await api(`/evaluaciones/detalle/${base._id}`);
-          setEvalActual(detalle);
-        } catch {
-          setEvalActual(base);
-        }
-      } else {
-        setEvalActual(null);
-      }
-    };
-    loadEvalDetalle();
-  }, [evalsEmpleado, selected?._id, periodoSel]);
-
-  // ===== Sidebar items
-  const sidebarItems = useMemo(() => {
-    let items = [];
-    if (!data) return items;
-    if (tab === "todos" || tab === "objetivo") {
-      items = items.concat(
-        (data.objetivos || []).map((o) => ({ ...o, _tipo: "objetivo" }))
-      );
+      toast.success("Respuesta enviada a RRHH correctamente.");
+      fetchFeedbacks();
+    } catch (e) {
+      console.error(e);
+      toast.error("Error al guardar respuesta.");
     }
-    if (tab === "todos" || tab === "aptitud") {
-      items = items.concat(
-        (data.aptitudes || []).map((a) => ({ ...a, _tipo: "aptitud" }))
-      );
-    }
-    const t = dq.trim().toLowerCase();
-    if (t) {
-      items = items.filter(
-        (i) =>
-          (i.nombre || "").toLowerCase().includes(t) ||
-          (i.descripcion || "").toLowerCase().includes(t)
-      );
-    }
-    items.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
-    return items;
-  }, [data, tab, dq]);
-
-  // Selección inicial / saneo
-  useEffect(() => {
-    if (sidebarItems.length && !selected) {
-      setSelected(sidebarItems[0]);
-    } else if (
-      selected &&
-      !sidebarItems.find((i) => String(i._id) === String(selected._id))
-    ) {
-      setSelected(sidebarItems[0] || null);
-    }
-  }, [sidebarItems, selected]);
-
-  // Periodo default por objetivo
-  useEffect(() => {
-    if (selected?.hitos?.length) {
-      setPeriodoSel(selected.hitos[0].periodo);
-    } else {
-      setPeriodoSel(null);
-    }
-  }, [selected?._id]);
-
-  // Detalle de hito visible
-  const detalleHito = useMemo(() => {
-    if (!selected || !periodoSel) return null;
-    const h = (selected.hitos || []).find((x) => x.periodo === periodoSel) || null;
-    const progreso = Number(
-      evalActual?.actual ?? h?.actual ?? selected?.progreso ?? 0
-    );
-    return {
-      progreso,
-      fecha: h?.fecha || selected?.fechaLimite || null,
-    };
-  }, [selected, periodoSel, evalActual]);
-
-  // Serie evolución (para objetivos con hitos)
-  const serieEvolucion = useMemo(() => {
-    if (!selected?.hitos?.length) return [];
-    const list = [...selected.hitos]
-      .map((h) => ({ periodo: String(h.periodo), fecha: h.fecha || null }))
-      .sort((a, b) => a.periodo.localeCompare(b.periodo));
-
-    const evalPorPeriodo = new Map();
-    for (const ev of evalsEmpleado) {
-      const pid = String(ev.plantillaId?._id || ev.plantillaId);
-      if (pid !== String(selected._id)) continue;
-      evalPorPeriodo.set(String(ev.periodo), Number(ev.actual ?? 0));
-    }
-
-    return list.map((x) => ({
-      periodo: x.periodo,
-      valor: Number(
-        evalPorPeriodo.has(x.periodo)
-          ? evalPorPeriodo.get(x.periodo)
-          : (selected.hitos || []).find((h) => String(h.periodo) === x.periodo)
-              ?.actual ?? 0
-      ),
-    }));
-  }, [selected?._id, selected?.hitos, evalsEmpleado]);
-
-  // ===== Conformidad (en comentarios, pie)
-  const setConformidad = (estado /* "ACK"|"CONTEST" */) => {
-    setEvalActual((prev) => ({
-      ...(prev || {}),
-      empleadoAck: {
-        estado,
-        fecha: new Date().toISOString(),
-        userId: user?._id || user?.id || null,
-      },
-    }));
   };
 
- const persistBorrador = async () => {
-  const empleadoId = empleadoIdFromUser(user);
-  const matches = await api(
-    `/evaluaciones?empleado=${empleadoId}&plantillaId=${selected._id}&periodo=${periodoSel}`
-  );
+  const toggleExpand = (id) => {
+    setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
-  const ev = Array.isArray(matches) ? matches[0] : matches?.items?.[0] || null;
-  if (!ev?._id) {
-    toast.error("No encontré la evaluación para enviar.");
-    return null;
-  }
+  const scrollToSection = (ref) => {
+    const yOffset = -100; // Offset for sticky header
+    const element = ref.current;
+    if (element) {
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  };
 
-  // Según el estado elegido en los botones "De acuerdo / En desacuerdo"
-  const isContest = evalActual?.empleadoAck?.estado === "CONTEST";
+  if (!user) return <div className="p-6 text-center">Iniciá sesión.</div>;
 
-  const endpoint = isContest
-    ? `/evaluaciones/${ev._id}/employee-contest`
-    : `/evaluaciones/${ev._id}/employee-ack`;
+  const currentYear = new Date().getFullYear();
+  const timelineItems = [
+    { id: "Q1", label: "Noviembre", sub: "Inicio", date: `${currentYear - 1}-11-01` },
+    { id: "Q2", label: "Febrero", sub: "Seguimiento", date: `${currentYear}-02-01` },
+    { id: "Q3", label: "Mayo", sub: "Seguimiento", date: `${currentYear}-05-01` },
+    { id: "FINAL", label: "Agosto", sub: "Cierre Anual", date: `${currentYear}-08-30` }
+  ];
 
-  const saved = await api(endpoint, {
-    method: "POST",
-    body: {
-      comentarioEmpleado: evalActual?.comentarioEmpleado ?? "",
-    },
-  });
-
-  return saved?._id || ev._id;
-};
-
-  // ===== Render
-  if (!user) {
-    return (
-      <div className="container-app bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
-        <div className="max-w-5xl mx-auto rounded-xl bg-card ring-1 ring-border/60 p-6 text-center text-sm text-muted-foreground">
-          Iniciá sesión para ver tu desempeño.
-        </div>
-      </div>
-    );
-  }
+  const evaluatorName = selectedFeedback?.creadoPor?.nombre
+    ? `${selectedFeedback.creadoPor.nombre} ${selectedFeedback.creadoPor.apellido}`
+    : "Evaluador no asignado";
 
   return (
-    <div className="container-app">
-      <div className="mx-auto max-w-[1200px] space-y-6 px-2 sm:px-0">
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3 rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-slate-900/70 backdrop-blur-md shadow-md">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">Mi desempeño</h1>
-            <p className="text-sm text-muted-foreground">
-              Consultá tu avance de objetivos y aptitudes, y firmá tus evaluaciones por
-              período.
-            </p>
+    <div className="min-h-screen bg-slate-50/50 pb-12">
+      {/* Header Negro */}
+      <div className="bg-slate-900 text-white pt-12 pb-24 px-4 md:px-8 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-3xl opacity-20 translate-x-1/2 -translate-y-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-600 rounded-full blur-3xl opacity-20 -translate-x-1/2 translate-y-1/2"></div>
+
+        <div className="max-w-[90%] mx-auto relative z-10">
+          <div className="flex justify-between items-end mb-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight mb-2">Hola, {empleadoNombre}</h1>
+              <p className="text-slate-400 text-lg">Seguimiento de evaluaciones y feedback continuo</p>
+            </div>
+            <div className="hidden md:block text-right">
+              <div className="text-sm text-slate-400 uppercase tracking-wider font-medium mb-1">Año en curso</div>
+              <div className="text-2xl font-bold">{currentYear}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-[90%] mx-auto px-4 md:px-8 -mt-16 relative z-20">
+        <div className="grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-8">
+
+          {/* SIDEBAR NAVIGATION (Sticky) */}
+          <div className="hidden lg:block space-y-2 sticky top-24 h-fit">
+            <div className="bg-white/80 backdrop-blur-sm p-2 rounded-2xl border border-slate-200/60 shadow-sm">
+              <button
+                onClick={() => scrollToSection(sectionFeedbackRef)}
+                className="w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all font-medium"
+              >
+                <LayoutDashboard className="w-5 h-5" />
+                Resultado Feedback
+              </button>
+              <button
+                onClick={() => scrollToSection(sectionDetailsRef)}
+                className="w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all font-medium"
+              >
+                <ListChecks className="w-5 h-5" />
+                Objetivos y Competencias
+              </button>
+              <button
+                onClick={() => scrollToSection(sectionValidationRef)}
+                className="w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all font-medium"
+              >
+                <FileSignature className="w-5 h-5" />
+                Conformidad
+              </button>
+            </div>
           </div>
 
-          {resumenAnual && (
-            <div className="w-full mt-2">
-              <div className="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/90 dark:bg-slate-900/80 backdrop-blur p-4 shadow-md">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <div className="text-[11px] text-muted-foreground mb-1">
-                      Resultado global (referencial)
-                    </div>
-                    <div className="text-3xl font-bold tracking-tight">
-                      {Math.round(resumenAnual.global)}%
-                    </div>
-                    <div className="mt-2">
-                      <ProgressBar value={resumenAnual.global} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-muted-foreground mb-1">
-                      🎯 Objetivos (peso total {resumenAnual.objetivos.peso || 0}%)
-                    </div>
-                    <div className="text-lg font-medium">
-                      {Math.round(resumenAnual.objetivos.score)}%
-                    </div>
-                    <div className="mt-2">
-                      <ProgressBar value={resumenAnual.objetivos.score} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-muted-foreground mb-1">💡 Aptitudes</div>
-                    <div className="text-lg font-medium">
-                      {Math.round(resumenAnual.aptitudes.score)}%
-                    </div>
-                    <div className="mt-2">
-                      <ProgressBar value={resumenAnual.aptitudes.score} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+          {/* MAIN CONTENT (Scrollable) */}
+          <div className="space-y-12">
 
-        {/* Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-6">
-          {/* Sidebar */}
-          <aside className="rounded-2xl bg-white/85 dark:bg-slate-900/80 backdrop-blur md:shadow-lg ring-1 ring-black/5 dark:ring-white/10 overflow-hidden transition-colors">
-            <div className="p-3 border-b border-border/60 sticky top-0 bg-card z-10">
-              <div className="inline-flex rounded-lg bg-muted p-1">
-                {[
-                  { k: "todos", lbl: "Todos" },
-                  { k: "objetivo", lbl: "🎯 Objetivos" },
-                  { k: "aptitud", lbl: "💡 Aptitudes" },
-                ].map((b) => (
-                  <button
-                    key={b.k}
-                    className={`px-3 py-1.5 text-xs rounded-md ${
-                      tab === b.k
-                        ? "bg-background shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    onClick={() => setTab(b.k)}
-                  >
-                    {b.lbl}
-                  </button>
-                ))}
-              </div>
+            {/* SECTION 1: FEEDBACK RESULTS (Timeline + Summary) */}
+            <div ref={sectionFeedbackRef} className="scroll-mt-32">
+              {/* Timeline Card */}
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 p-8 mb-8">
+                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-8 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" /> Cronograma Anual
+                </h3>
 
-              <div className="mt-3">
-                <input
-                  ref={searchRef}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                  placeholder="Buscar por título o descripción…"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
-              </div>
-            </div>
+                <div className="relative flex items-center justify-between px-4 md:px-12">
+                  <div className="absolute left-0 right-0 top-3 h-0.5 bg-slate-100 -z-0 mx-8 md:mx-16"></div>
+                  {timelineItems.map((p) => {
+                    const fb = feedbacks.find(f => f.periodo === p.id);
+                    const isSelected = selectedFeedback?.periodo === p.id;
+                    const isDone = fb?.estado === "SENT" || fb?.estado === "REALIZADO" || fb?.estado === "ACKNOWLEDGED" || fb?.estado === "CLOSED";
+                    const isFuture = !fb || fb.isPlaceholder;
 
-            <div className="max-h-[50vh] overflow-auto">
-              {loading ? (
-                <div className="p-3 text-sm text-muted-foreground">Cargando…</div>
-              ) : sidebarItems.length ? (
-                <ul className="divide-y divide-border/60">
-                  {sidebarItems.map((it) => {
-                    const sel =
-                      selected && String(selected._id) === String(it._id);
-                    const score =
-                      it._tipo === "objetivo"
-                        ? Number(it.progreso ?? 0)
-                        : Number(it.puntuacion ?? it.score ?? 0);
+                    let statusColor = "bg-white border-slate-300 text-slate-400";
+                    if (isDone) statusColor = "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/30";
+                    else if (isSelected) statusColor = "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/30 scale-110";
+                    else if (!isFuture) statusColor = "bg-white border-amber-400 text-amber-500";
+
                     return (
-                      <li key={it._id}>
-                        <button
-                          className={`w-full text-left px-3 py-2.5 transition rounded-md ${
-                            sel
-                              ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
-                              : "hover:bg-slate-50 dark:hover:bg-slate-800"
-                          }`}
-                          onClick={() => setSelected(it)}
-                        >
-                          <div className="text-[11px] text-muted-foreground mb-1">
-                            {it._tipo === "objetivo" ? "🎯 Objetivo" : "💡 Aptitud"}
-                          </div>
-                          <div className="font-medium leading-snug line-clamp-2">
-                            {it.nombre}
-                          </div>
-                          <div className="mt-2">
-                            <ProgressBar value={score} />
-                          </div>
-                          <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span className="truncate pr-2 line-clamp-1">
-                              {it.descripcion || "—"}
-                            </span>
-                            <Pill title="Progreso">{Math.round(score)}%</Pill>
-                          </div>
-                        </button>
-                      </li>
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          const found = feedbacks.find(f => f.periodo === p.id);
+                          if (found) setSelectedFeedback(found);
+                        }}
+                        className="relative z-10 flex flex-col items-center group focus:outline-none"
+                      >
+                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${statusColor} ${isSelected ? 'scale-125' : 'group-hover:scale-110'}`}>
+                          {isDone ? <CheckCircle2 className="w-4 h-4" /> : <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-current'}`} />}
+                        </div>
+                        <div className={`mt-4 text-center transition-all ${isSelected ? 'transform translate-y-1' : ''}`}>
+                          <div className={`text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{p.label}</div>
+                          <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{p.sub}</div>
+                        </div>
+                      </button>
                     );
                   })}
-                </ul>
-              ) : (
-                <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
-              )}
-            </div>
-          </aside>
-
-          {/* Hoja detalle */}
-          <section className="rounded-xl bg-card shadow-sm ring-1 ring-border/60 overflow-hidden">
-            {selected ? (
-              <>
-                {/* Encabezado (full width, limpio) */}
-                <div className="p-5 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/80 dark:bg-slate-900/70 backdrop-blur">
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                    Detalle
-                  </div>
-                  <h2 className="text-xl font-semibold leading-tight tracking-tight">
-                    {selected?.nombre}
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {selected?.descripcion || "—"}
-                  </p>
                 </div>
+              </div>
 
-                {/* Datos clave (orden nuevo): Periodo -> Peso -> Progreso */}
-                <div className="p-4 grid grid-cols-1 md:grid-cols-5 gap-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-transparent">
-                  <div className="md:col-span-2 rounded-md bg-muted/30 p-3">
-                    <div className="text-[11px] text-muted-foreground">Periodo</div>
-                    <select
-                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
-                      value={periodoSel || ""}
-                      onChange={(e) => setPeriodoSel(e.target.value || null)}
-                    >
-                      {(selected?.hitos || []).map((h, idx) => (
-                        <option key={`${h.periodo}-${idx}`} value={h.periodo}>
-                          {h.periodo}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="text-[11px] text-muted-foreground mt-1">
-                      Vencimiento:{" "}
-                      <b className="text-foreground">
-                        {detalleHito?.fecha
-                          ? String(detalleHito.fecha).slice(0, 10)
-                          : "—"}
-                      </b>
+              {selectedFeedback ? (
+                <div className="space-y-6">
+                  {/* Header Feedback */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 relative overflow-hidden">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                          <MessageSquare className="w-6 h-6 text-blue-600" />
+                          Feedback {selectedFeedback.periodo}
+                        </h2>
+                        <div className="flex flex-col mt-1 ml-9">
+                          <span className="text-sm text-slate-500">
+                            {selectedFeedback.isPlaceholder
+                              ? "Este periodo aún no ha sido evaluado."
+                              : `Recibido el ${selectedFeedback.submittedToEmployeeAt ? new Date(selectedFeedback.submittedToEmployeeAt).toLocaleDateString() : "—"}`
+                            }
+                          </span>
+                          {!selectedFeedback.isPlaceholder && (
+                            <span className="text-xs font-bold text-slate-400 uppercase mt-1">
+                              Evaluado por: <span className="text-slate-600">{evaluatorName}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <StatusBadge status={selectedFeedback.estado} />
                     </div>
+
+                    {!selectedFeedback.isPlaceholder && (
+                      <div className="bg-slate-50/80 p-6 rounded-xl border border-slate-200/60">
+                        <label className="text-xs font-bold text-blue-600 uppercase mb-3 block flex items-center gap-2">
+                          <UserCircle2 className="w-4 h-4" /> Comentarios del Líder
+                        </label>
+                        <p className="text-slate-700 text-sm whitespace-pre-wrap leading-relaxed">
+                          {selectedFeedback.comentario || "Sin comentarios."}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
-                  {(selected.peso ?? selected.pesoBase) != null && (
-                    <div className="rounded-lg p-3 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-slate-900/60">
-                      <div className="text-[11px] text-muted-foreground">Peso</div>
-                      <div className="font-medium">
-                        {selected.peso ?? selected.pesoBase}%
+                  {/* Summary Scores */}
+                  {!selectedFeedback.isPlaceholder && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center">
+                        <div className="text-sm text-slate-500 font-medium mb-1">Score Objetivos</div>
+                        <div className="text-3xl font-black text-blue-600">{Math.round(periodResults.scores.obj)}%</div>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center">
+                        <div className="text-sm text-slate-500 font-medium mb-1">Score Competencias</div>
+                        <div className="text-3xl font-black text-amber-500">{Math.round(periodResults.scores.comp)}%</div>
+                      </div>
+                      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-2xl shadow-lg shadow-blue-600/20 flex flex-col items-center justify-center text-white">
+                        <div className="text-sm text-blue-100 font-medium mb-1">Score Global</div>
+                        <div className="text-3xl font-black">{Math.round(periodResults.scores.global)}%</div>
                       </div>
                     </div>
                   )}
-
-                  <div className="md:col-span-2 rounded-lg p-3 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-slate-900/60">
-                    <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      Progreso <span>📈</span>
-                    </div>
-                    <div className="font-medium mb-2">
-                      {selected._tipo === "objetivo"
-                        ? `${Math.round(detalleHito?.progreso ?? 0)}%`
-                        : `${Math.round(
-                            detalleHito?.progreso ?? selected.puntuacion ?? 0
-                          )}%`}
-                    </div>
-                    <ProgressBar
-                      value={
-                        selected._tipo === "objetivo"
-                          ? detalleHito?.progreso ?? 0
-                          : detalleHito?.progreso ?? selected.puntuacion ?? 0
-                      }
-                    />
-                  </div>
                 </div>
-
-                {/* Gráfico de evolución */}
-                <div className="p-4 border-b border-border/60">
-                  <SectionTitle>📊 Evolución del objetivo</SectionTitle>
-                  <div className="h-56 w-full rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-slate-900/60 px-2 py-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={serieEvolucion}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="periodo" fontSize={12} />
-                        <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} fontSize={12} />
-                        <Tooltip formatter={(v) => `${v}%`} />
-                        <Line type="monotone" dataKey="valor" strokeWidth={2} dot />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+              ) : (
+                <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-dashed">
+                  Seleccioná un periodo para ver el detalle.
                 </div>
+              )}
+            </div>
 
-                {/* Metas */}
-                <div className="p-4 border-b border-border/60">
-                  <SectionTitle>🧭 Metas del período</SectionTitle>
-                  <div className="rounded-xl ring-1 ring-black/5 dark:ring-white/10 overflow-hidden shadow-sm">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 z-10">
-                        <tr className="bg-slate-50/80 dark:bg-slate-800/70 backdrop-blur text-[11px] uppercase text-slate-500 dark:text-slate-400 tracking-wide">
-                          <th className="text-left px-3 py-2 w-[45%]">Meta</th>
-                          <th className="text-left px-3 py-2">Esperado</th>
-                          <th className="text-left px-3 py-2">Resultado</th>
-                          <th className="text-left px-3 py-2">Cumple</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(() => {
-                          const metas =
-                            (evalActual?.metasResultados?.length
-                              ? evalActual.metasResultados
-                              : (selected.hitos || []).find(
-                                  (h) => h.periodo === periodoSel
-                                )?.metas) || [];
+            {/* SECTION 2: DETAILED VIEW (Objectives & Competencies) */}
+            <div ref={sectionDetailsRef} className="scroll-mt-32">
+              {!selectedFeedback || selectedFeedback.isPlaceholder ? (
+                <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-dashed">
+                  No hay detalles disponibles para este periodo.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Objetivos */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-5 h-5 text-blue-600" />
+                      <h3 className="font-bold text-slate-800 text-lg">Objetivos</h3>
+                    </div>
+                    {periodResults.objetivos.map(obj => (
+                      <ObjectiveCard
+                        key={obj._id}
+                        obj={obj}
+                        currentPeriod={selectedFeedback.periodo}
+                        expanded={expandedItems[obj._id]}
+                        onToggle={() => toggleExpand(obj._id)}
+                      />
+                    ))}
+                    {periodResults.objetivos.length === 0 && <div className="p-6 text-center text-slate-400 italic bg-white rounded-xl border border-dashed">No hay objetivos asignados.</div>}
+                  </div>
 
-                          if (!metas.length) {
-                            return (
-                              <tr>
-                                <td
-                                  className="px-3 py-3 text-muted-foreground text-center"
-                                  colSpan={4}
-                                >
-                                  No hay metas definidas para este período.
-                                </td>
-                              </tr>
-                            );
-                          }
+                  {/* Competencias */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Lightbulb className="w-5 h-5 text-amber-500" />
+                      <h3 className="font-bold text-slate-800 text-lg">Competencias</h3>
+                    </div>
+                    {periodResults.aptitudes.map(apt => (
+                      <div key={apt._id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
+                        <button
+                          onClick={() => toggleExpand(apt._id)}
+                          className="w-full p-5 flex items-center justify-between text-left"
+                        >
+                          <div className="flex-1 pr-4">
+                            <div className="font-bold text-slate-800">{apt.nombre}</div>
+                            <div className="mt-3 w-full max-w-xs h-2 rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-amber-400 to-orange-400" style={{ width: `${Math.max(0, Math.min(100, Math.round(apt.scorePeriodo)))}%` }}></div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">{Math.round(apt.scorePeriodo)}%</span>
+                            {expandedItems[apt._id] ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                          </div>
+                        </button>
 
-                          return metas.map((m, idx) => (
-                            <tr
-                              key={idx}
-                              className="border-t border-slate-200/60 dark:border-slate-700/60 odd:bg-white/70 even:bg-slate-50/60 dark:odd:bg-slate-900/50 dark:even:bg-slate-800/40"
-                            >
-                              <td className="px-3 py-2">
-                                <div className="line-clamp-2 break-words">
-                                  {m.nombre || "Meta"}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2">
-                                {m.esperado ?? m.target ?? "—"} {m.unidad || ""}
-                              </td>
-                              <td className="px-3 py-2">
-                                <span className="inline-block min-w-[48px]">
-                                  {m.resultado ?? "—"}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2">
-                                {m.cumple === true ? (
-                                  <span className="text-emerald-700 text-xs">✔ Cumple</span>
-                                ) : m.cumple === false ? (
-                                  <span className="text-rose-600 text-xs">✘ No cumple</span>
-                                ) : (
-                                  <span className="text-muted-foreground text-xs">—</span>
+                        {expandedItems[apt._id] && (
+                          <div className="p-5 bg-slate-50/50 border-t border-slate-100 text-sm space-y-3 animate-in slide-in-from-top-2">
+                            <div className="grid grid-cols-1 gap-4">
+                              <div className="bg-white p-3 rounded border border-slate-200">
+                                <div className="text-xs font-bold text-slate-400 uppercase mb-1">Descripción</div>
+                                <div className="text-slate-700">{apt.descripcion || "Sin descripción"}</div>
+                              </div>
+                              <div className="bg-white p-3 rounded border border-slate-200">
+                                <div className="text-xs font-bold text-slate-400 uppercase mb-1">Resultado Obtenido</div>
+                                <div className="text-slate-700 font-medium">{apt.hitoActual?.actual ?? "—"}</div>
+                                {apt.hitoActual?.comentario && (
+                                  <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500 italic">
+                                    "{apt.hitoActual.comentario}"
+                                  </div>
                                 )}
-                              </td>
-                            </tr>
-                          ));
-                        })()}
-                      </tbody>
-                    </table>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {periodResults.aptitudes.length === 0 && <div className="p-6 text-center text-slate-400 italic bg-white rounded-xl border border-dashed">No hay competencias asignadas.</div>}
                   </div>
                 </div>
+              )}
+            </div>
 
-                {/* Comentarios (orden: Jefe -> Colaborador) + Conformidad al pie */}
-                <div className="p-4 border-b border-border/60 space-y-3">
-                  <SectionTitle>💬 Comentarios del período</SectionTitle>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Primero JEFE */}
+            {/* SECTION 3: VALIDATION */}
+            <div ref={sectionValidationRef} className="scroll-mt-32">
+              {!selectedFeedback || selectedFeedback.isPlaceholder ? (
+                <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-dashed">
+                  No hay validación disponible para este periodo.
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+                  <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-lg">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    Conformidad y Validación
+                  </h3>
+
+                  <div className="space-y-6">
                     <div>
-                      <div className="text-[11px] text-muted-foreground mb-1">
-                        Comentario del Jefe
-                      </div>
-
+                      <label className="text-sm font-medium text-slate-700 mb-2 block">Comentarios para RRHH</label>
                       <textarea
-                        className="w-full min-h-32 rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-slate-50/70 dark:bg-slate-800/50 px-3 py-2 text-sm resize-y"
-                        placeholder="(Sólo visible si fue cargado por tu jefe)"
-                        value={evalActual?.comentarioManager ?? ""}
-                        readOnly
+                        className="w-full h-32 rounded-xl border border-slate-200 p-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                        placeholder="Escribí tus comentarios sobre este feedback..."
+                        value={localComment}
+                        onChange={(e) => setLocalComment(e.target.value)}
+                        disabled={selectedFeedback.estado === "CLOSED"}
                       />
                     </div>
-                    {/* Luego COLABORADOR */}
-                    <div>
-  <div className="text-[11px] text-muted-foreground mb-1">
-    Comentario del Colaborador
-  </div>
 
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
+                      <div className="flex gap-3 w-full sm:w-auto">
+                        <button
+                          onClick={() => setLocalAck("ACK")}
+                          disabled={selectedFeedback.estado === "CLOSED"}
+                          className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${localAck === "ACK"
+                            ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500 ring-offset-2"
+                            : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${localAck === "ACK" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-400"}`}>
+                            {localAck === "ACK" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                          </div>
+                          Estoy de acuerdo
+                        </button>
+                        <button
+                          onClick={() => setLocalAck("CONTEST")}
+                          disabled={selectedFeedback.estado === "CLOSED"}
+                          className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${localAck === "CONTEST"
+                            ? "bg-rose-100 text-rose-700 ring-2 ring-rose-500 ring-offset-2"
+                            : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${localAck === "CONTEST" ? "border-rose-600 bg-rose-600 text-white" : "border-slate-400"}`}>
+                            {localAck === "CONTEST" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                          </div>
+                          En desacuerdo
+                        </button>
+                      </div>
 
-  <textarea
-    className="w-full min-h-32 rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-slate-900/70 px-3 py-2 text-sm resize-y shadow-sm"
-    placeholder="Dejá tu devolución para esta evaluación (la verá tu jefe y RRHH)…"
-    value={evalActual?.comentarioEmpleado ?? ""}   // ahora usa comentarioEmpleado
-    onChange={(e) => {
-      setEvalActual((prev) => ({
-        ...(prev || {}),
-        comentarioEmpleado: e.target.value,        // solo toca comentarioEmpleado
-      }));
-    }}
-  />
-</div>
-                  </div>
-
-                  {/* Pie: Conformidad + Acciones */}
-                  <div className="flex flex-col md:flex-row md:items-center gap-3 md:justify-between pt-2">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-[12px] text-muted-foreground">Conformidad:</span>
-                      <button
-                        onClick={() => setConformidad("ACK")}
-                        className={`px-3 py-1.5 rounded-md text-sm ring-1 transition ${
-                          evalActual?.empleadoAck?.estado === "ACK"
-                            ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
-                            : "bg-slate-100 hover:bg-slate-200 ring-slate-300 text-slate-700"
-                        }`}
-                      >
-                        De acuerdo
-                      </button>
-                      <button
-                        onClick={() => setConformidad("CONTEST")}
-                        className={`px-3 py-1.5 rounded-md text-sm ring-1 transition ${
-                          evalActual?.empleadoAck?.estado === "CONTEST"
-                            ? "bg-rose-100 text-rose-800 ring-rose-300"
-                            : "bg-slate-100 hover:bg-slate-200 ring-slate-300 text-slate-700"
-                        }`}
-                      >
-                        En desacuerdo
-                      </button>
-
-                      {evalActual?.empleadoAck?.estado && (
-                        <Pill title="Última respuesta">
-                          {evalActual.empleadoAck.estado === "ACK" ? "✅ De acuerdo" : "❌ En desacuerdo"}
-                        </Pill>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
                       <Button
-                        variant="outline"
-                        onClick={async () => {
-                          try {
-                            const id = await persistBorrador();
-                            if (!id) return;
-                            toast.success("Borrador guardado.");
-                          } catch (e) {
-                            console.error(e);
-                            toast.error("No pude guardar el borrador.");
-                          }
-                        }}
-                        className="rounded-xl shadow-sm"
+                        onClick={handleSaveResponse}
+                        disabled={selectedFeedback.estado === "CLOSED" || !localAck}
+                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 px-8"
                       >
-                        Guardar borrador
+                        {selectedFeedback.estado === "CLOSED" ? "Cerrado" : "Enviar a RRHH"}
                       </Button>
-
-   <Button
-  onClick={async () => {
-    try {
-      const id = await persistBorrador(); // ahora hace ACK o CONTEST con comentarioEmpleado
-      if (!id) return;
-
-      toast.success("Respuesta enviada a RRHH.");
-      const detalle = await api(`/evaluaciones/detalle/${id}`);
-      setEvalActual(detalle);
-    } catch (e) {
-      console.error(e);
-      toast.error("No pude enviar a RRHH.");
-    }
-  }}
-  className="rounded-xl shadow-sm bg-indigo-600 hover:bg-indigo-700"
->
-  Enviar a RRHH
-</Button>
                     </div>
+
+                    {selectedFeedback.estado === "CLOSED" && (
+                      <div className="mt-4 p-4 bg-slate-50 text-slate-500 text-sm rounded-xl flex items-center gap-3 border border-slate-100">
+                        <Lock className="w-5 h-5" />
+                        <span>Este feedback está cerrado y no se puede modificar.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </>
-            ) : (
-              <div className="p-6 text-sm text-muted-foreground">
-                Elegí un objetivo o aptitud en la izquierda para ver el detalle.
-              </div>
-            )}
-          </section>
+              )}
+            </div>
 
-          {/* Historial */}
-          <aside className="hidden lg:block sticky top-4 self-start rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-slate-900/60 backdrop-blur p-2">
-            <HistorialEvaluacion
-              trazabilidad={
-                Array.isArray(evalActual?.timeline) && evalActual.timeline.length
-                  ? evalActual.timeline
-                  : [
-                      evalActual?.estado
-                        ? {
-                            estado: evalActual.estado,
-                            fecha: evalActual?.fecha || selected?.fechaLimite,
-                          }
-                        : null,
-                 evalActual?.comentarioEmpleado
-  ? {
-      estado: "comentario-colaborador",
-      fecha: new Date(),
-      comentario: evalActual.comentarioEmpleado,
-    }
-  : null,
-                      evalActual?.comentarioManager
-                        ? {
-                            estado: "comentario-jefe",
-                            fecha: new Date(),
-                            comentario: evalActual.comentarioManager,
-                          }
-                        : null,
-                      evalActual?.empleadoAck?.estado
-                        ? {
-                            estado:
-                              evalActual.empleadoAck.estado === "ACK"
-                                ? "EMPLOYEE_ACK"
-                                : "EMPLOYEE_CONTEST",
-                            fecha: evalActual.empleadoAck.fecha || new Date(),
-                          }
-                        : null,
-                    ].filter(Boolean)
-              }
-            />
-          </aside>
+          </div>
         </div>
       </div>
     </div>
