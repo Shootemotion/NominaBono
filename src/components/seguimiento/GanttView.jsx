@@ -17,34 +17,56 @@ const STATUS_CONFIG = {
     pill: "bg-amber-500",
     order: 2,
   },
-  PENDING_EMPLOYEE: {
-    id: "PENDING_EMPLOYEE",
-    label: "Enviado al Empleado",
-    color: "text-cyan-700 bg-cyan-50 border-cyan-200",
-    pill: "bg-cyan-500",
-    order: 3,
-  },
-  PENDING_HR: {
-    id: "PENDING_HR",
-    label: "En RRHH",
-    color: "text-blue-700 bg-blue-50 border-blue-200",
-    pill: "bg-blue-500",
-    order: 4,
-  },
-  CLOSED: {
-    id: "CLOSED",
-    label: "Cerrado",
+  completado: {
+    id: "completado",
+    label: "Completado",
     color: "text-emerald-700 bg-emerald-50 border-emerald-200",
     pill: "bg-emerald-500",
-    order: 5,
-  },
-  pendiente: {
-    id: "pendiente",
-    label: "Pendiente",
-    color: "text-slate-600 bg-slate-50 border-slate-200",
-    pill: "bg-slate-400",
     order: 6,
   },
+  borrador: {
+    id: "borrador",
+    label: "Borrador",
+    color: "text-slate-600 bg-slate-50 border-slate-200",
+    pill: "bg-slate-400",
+    order: 5,
+  },
+  futuro: {
+    id: "futuro",
+    label: "Futuro",
+    color: "text-cyan-700 bg-cyan-50 border-cyan-200",
+    pill: "bg-cyan-500",
+    order: 7,
+  },
+  pendiente: { // Fallback
+    id: "pendiente",
+    label: "Pendiente",
+    color: "text-slate-400 bg-slate-50 border-slate-200",
+    pill: "bg-slate-300",
+    order: 8,
+  },
+  // Nuevos estados Feedback
+  enviado_empleado: {
+    id: "enviado_empleado",
+    label: "Enviado al empleado",
+    color: "text-blue-700 bg-blue-50 border-blue-200",
+    pill: "bg-blue-500",
+    order: 3,
+  },
+  enviado_rrhh: {
+    id: "enviado_rrhh",
+    label: "Enviado a RRHH",
+    color: "text-purple-700 bg-purple-50 border-purple-200",
+    pill: "bg-purple-500",
+    order: 4,
+  },
+  finalizado: {
+    id: "finalizado",
+    label: "Finalizado",
+    color: "text-emerald-800 bg-emerald-100 border-emerald-300",
+    pill: "bg-emerald-600",
+    order: 6, // Same as completado?
+  }
 };
 
 function parsePeriodoToDate(periodoStr) {
@@ -59,19 +81,51 @@ function parsePeriodoToDate(periodoStr) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function getHybridStatus(sourceData, fechaRef) {
-  const dbStatus = sourceData?.estado;
-  if (dbStatus && dbStatus !== "MANAGER_DRAFT" && dbStatus !== "PENDIENTE") return dbStatus;
-  if (!fechaRef) return "pendiente";
+function getHybridStatus(hito, fechaRef, itemType) {
+  // Lógica específica para Feedback
+  if (itemType === "feedback") {
+    if (hito?.estado === "SENT") return "enviado_empleado";
+    if (hito?.estado === "PENDING_HR") return "enviado_rrhh";
+    if (hito?.estado === "CLOSED") return "finalizado";
+
+    // Logic for DRAFT in Feedback
+    if (hito?.estado === "DRAFT" || !hito?.estado) {
+      // El usuario quiere ver solo los estados del flujo (Borrador, Enviado..., Finalizado)
+      // Incluso si está vencido, el estado es Borrador.
+      return "borrador";
+    }
+  }
+
+  // Lógica para Objetivos/Aptitudes (ya no usan flujo de envío)
+
+  // 1. Si ya tiene resultado cargado -> Completado
+  if (hito?.actual !== null && hito?.actual !== undefined) {
+    return "completado";
+  }
+
+  // 2. Si no tiene fecha ref, asumimos futuro
+  if (!fechaRef) return "futuro";
+
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const ref = new Date(fechaRef);
   ref.setHours(23, 59, 59, 999);
+
   const diffMs = ref - hoy;
   const diffDays = Math.ceil(diffMs / MS_PER_DAY);
+
+  // 3. Vencido
   if (diffDays < 0) return "vencido";
+
+  // 4. Por vencer (próximos 7 días)
   if (diffDays <= 7) return "por_vencer";
-  return "pendiente";
+
+  // 5. Borrador (si existe el hito pero no está completo)
+  // Ignoramos MANAGER_DRAFT como estado de flujo, lo tratamos como borrador/en curso
+  if (hito?.estado === "MANAGER_DRAFT") return "borrador";
+
+  // 6. Futuro
+  return "futuro";
 }
 
 function buildColumns(anio) {
@@ -125,7 +179,7 @@ export default function GanttView({
           const fechaRef = hito.fecha
             ? new Date(hito.fecha)
             : parsePeriodoToDate(hito.periodo);
-          const statusKey = getHybridStatus(hito, fechaRef);
+          const statusKey = getHybridStatus(hito, fechaRef, item._tipo);
 
           if (dueOnly && statusKey !== "vencido" && statusKey !== "por_vencer") return;
 

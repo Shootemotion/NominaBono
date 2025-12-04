@@ -9,6 +9,8 @@ import { generarHitos } from "../utils/generarHitos.js";
 const asObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 const isValidObjectId = (v) => mongoose.Types.ObjectId.isValid(String(v));
 
+import Feedback from '../models/Feedback.model.js';
+
 async function computeForEmployees(empleadoIds, anio) {
   if (!Array.isArray(empleadoIds) || empleadoIds.length === 0) return [];
   const ids = empleadoIds.map(asObjectId);
@@ -36,6 +38,12 @@ async function computeForEmployees(empleadoIds, anio) {
 
   // evaluaciones
   const evals = await Evaluacion.find({
+    empleado: { $in: ids },
+    year: Number(anio),
+  }).lean();
+
+  // feedbacks
+  const feedbacksArr = await Feedback.find({
     empleado: { $in: ids },
     year: Number(anio),
   }).lean();
@@ -166,6 +174,9 @@ async function computeForEmployees(empleadoIds, anio) {
       const bono =
         objetivosArr.length > 0 || aptitudesArr.length > 0 ? `${scoreFinal}%` : null;
 
+      // Filter feedbacks for this employee
+      const empFeedbacks = feedbacksArr.filter(f => String(f.empleado) === empIdStr);
+
       return {
         empleado: {
           _id: e._id,
@@ -177,6 +188,7 @@ async function computeForEmployees(empleadoIds, anio) {
         },
         objetivos: { count: objetivosArr.length, sumPeso: sumPesoObj, items: objetivosArr },
         aptitudes: { count: aptitudesArr.length, sumPeso: sumPesoApt, items: aptitudesArr },
+        feedbacks: empFeedbacks,
         scoreObj,
         scoreApt,
         scoreFinal,

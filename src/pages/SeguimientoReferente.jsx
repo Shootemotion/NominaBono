@@ -253,6 +253,9 @@ export default function SeguimientoReferente() {
         // 2. Crear item de Feedback
         const feedbackItems = [];
         for (const emp of empleadosMap.values()) {
+          const dashObj = flatRows.find(r => r.empleado && String(r.empleado._id) === String(emp._id));
+          const empFeedbacks = dashObj?.feedbacks || [];
+
           feedbackItems.push({
             _id: `feedback-global`, // ID especial
             _tipo: "feedback",
@@ -267,7 +270,15 @@ export default function SeguimientoReferente() {
               { periodo: "Q2", fecha: `${anio + 1}-02-01` },
               { periodo: "Q3", fecha: `${anio + 1}-05-01` },
               { periodo: "FINAL", fecha: `${anio + 1}-08-30` }
-            ]
+            ].map(h => {
+              const fb = empFeedbacks.find(f => f.periodo === h.periodo);
+              return {
+                ...h,
+                estado: fb ? fb.estado : "DRAFT",
+                feedbackId: fb?._id,
+                actual: fb ? (fb.estado === "CLOSED" ? 100 : null) : null
+              };
+            })
           });
         }
 
@@ -492,30 +503,47 @@ export default function SeguimientoReferente() {
               empHints,
               showEmpHints,
               setShowEmpHints,
+              mainTab,
+              setMainTab
             }}
           />
         </div>
 
-        {/* TABS PRINCIPALES */}
-        <div className="flex space-x-1 bg-slate-200 p-1 rounded-lg w-fit">
-          <button
-            onClick={() => setMainTab("objetivos")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${mainTab === "objetivos"
-                ? "bg-white text-blue-600 shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-300/50"
-              }`}
-          >
-            🎯 Objetivos y Metas
-          </button>
-          <button
-            onClick={() => setMainTab("feedback")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${mainTab === "feedback"
-                ? "bg-white text-blue-600 shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-300/50"
-              }`}
-          >
-            💬 Reuniones de Feedback
-          </button>
+        {/* LEYENDA DE COLORES */}
+        <div className="flex flex-wrap gap-4 px-2">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-slate-400"></span>
+            <span className="text-slate-600">Borrador</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+            <span className="text-slate-600">Enviado al Empleado</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+            <span className="text-slate-600">Enviado a RRHH</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-emerald-600"></span>
+            <span className="text-slate-600">Finalizado</span>
+          </div>
+          <div className="w-px h-4 bg-slate-300 mx-2"></div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-emerald-400"></span>
+            <span className="text-slate-600">Obj. Completado</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-rose-500"></span>
+            <span className="text-slate-600">Vencido</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+            <span className="text-slate-600">Por Vencer</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full bg-cyan-500"></span>
+            <span className="text-slate-600">Futuro</span>
+          </div>
         </div>
 
         {/* Controles superiores */}
