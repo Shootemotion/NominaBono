@@ -51,22 +51,47 @@ function buildResumenEmpleado(data) {
   let objetivos = Array.isArray(data.objetivos) ? data.objetivos : (data.objetivos?.items || []);
   let aptitudes = Array.isArray(data.aptitudes) ? data.aptitudes : (data.aptitudes?.items || []);
 
-  const pesos = objetivos.map((o) => Number(o.peso ?? o.pesoBase ?? 0));
-  const prog = objetivos.map((o) => Number(o.progreso ?? 0));
-  const totalPeso = pesos.reduce((a, b) => a + b, 0) || 0;
+  // Calculate Objective Score
+  const pesosObj = objetivos.map((o) => Number(o.peso ?? 0));
+  const pesosBaseObj = objetivos.map((o) => Number(o.pesoBase ?? o.peso ?? 0));
+  const progObj = objetivos.map((o) => Number(o.progreso ?? 0));
 
-  const scoreObj = totalPeso > 0
-    ? pesos.reduce((acc, p, i) => acc + p * (prog[i] || 0), 0) / totalPeso
-    : prog.length ? prog.reduce((a, b) => a + b, 0) / prog.length : 0;
+  const totalBasePesoObj = pesosBaseObj.reduce((a, b) => a + b, 0) || 0;
 
-  const punt = aptitudes.map((a) => Number(a.puntuacion ?? a.score ?? 0));
-  const scoreApt = punt.length ? punt.reduce((a, b) => a + b, 0) / punt.length : 0;
 
-  const global = (scoreObj + scoreApt) / 2;
+
+  const scoreObjRaw = totalBasePesoObj > 0
+    ? pesosObj.reduce((acc, p, i) => {
+      const obj = objetivos[i];
+      const hasPermiteOver = obj.metas?.some(m => m.permiteOver) || obj.hitos?.some(h => h.metas?.some(m => m.permiteOver));
+      const rawScore = progObj[i] || 0;
+      const effectiveScore = hasPermiteOver ? rawScore : Math.min(rawScore, 100);
+      return acc + p * effectiveScore;
+    }, 0) / 100 // Always normalize to 100 base
+    : 0;
+
+  const scoreObj = scoreObjRaw; // Already weighted by reduce logic above? No, reduce logic uses weights.
+  // Wait, the reduce logic is: Sum(Weight * Score) / Sum(BaseWeight).
+  // This IS the weighted average.
+  // So scoreObjRaw IS the final Objective Score (0-100+).
+
+  // Calculate Aptitude Score
+  const pesosApt = aptitudes.map((a) => Number(a.peso ?? 0));
+  const pesosBaseApt = aptitudes.map((a) => Number(a.pesoBase ?? a.peso ?? 0));
+  const progApt = aptitudes.map((a) => Number(a.puntuacion ?? a.score ?? 0));
+
+  const scoreApt = progApt.length
+    ? progApt.reduce((a, b) => a + b, 0) / progApt.length
+    : 0;
+
+  // Global Score (70/30)
+  const scoreObjWeighted = scoreObj * 0.7;
+  const scoreAptWeighted = scoreApt * 0.3;
+  const global = scoreObjWeighted + scoreAptWeighted;
 
   return {
-    objetivos: { cantidad: objetivos.length, peso: totalPeso, score: scoreObj },
-    aptitudes: { cantidad: aptitudes.length, score: scoreApt },
+    objetivos: { cantidad: objetivos.length, peso: totalBasePesoObj, score: scoreObjWeighted, rawScore: scoreObj },
+    aptitudes: { cantidad: aptitudes.length, score: scoreAptWeighted, rawScore: scoreApt },
     global,
   };
 }
@@ -397,6 +422,8 @@ export default function EvaluacionFlujo() {
         estado: "MANAGER_DRAFT"
       };
 
+
+
       await api("/evaluaciones", { method: "POST", body });
       await api(`/evaluaciones/${selectedEmpleadoId}/${item._id}/${periodoEval}`, { method: "PUT", body });
 
@@ -504,8 +531,8 @@ export default function EvaluacionFlujo() {
         <div className="max-w-[1600px] mx-auto px-6 py-4">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="text-slate-400 hover:text-white hover:bg-white/10">
-                ← Volver
+              <Button variant="ghost" size="sm" onClick={() => state?.from === "seguimiento" ? navigate("/seguimiento") : navigate(-1)} className="text-slate-400 hover:text-white hover:bg-white/10">
+                {state?.from === "seguimiento" ? "← Volver al Gantt" : "← Volver"}
               </Button>
               <div>
                 <h1 className="text-xl font-bold flex items-center gap-2">
@@ -590,8 +617,8 @@ export default function EvaluacionFlujo() {
                           </CardTitle>
                         </div>
                         <div className="text-right">
-                          <div className="text-2xl font-black text-slate-700">{Math.round(obj.progreso)}%</div>
-                          <div className="text-[10px] text-slate-400 uppercase font-bold">Progreso</div>
+                          <div className="text-2xl font-black text-slate-700">{Math.round((obj.progreso * obj.peso) / 100)}%</div>
+                          <div className="text-[10px] text-slate-400 uppercase font-bold">Resultado</div>
                         </div>
                       </div>
                     </CardHeader>
@@ -928,40 +955,124 @@ export default function EvaluacionFlujo() {
                 const getBreakdown = (p) => {
                   if (!dashEmpleadoData) return { objetivos: 0, competencias: 0, global: 0, detailsObj: [], detailsComp: [] };
 
+                  // Helper to convert period to a comparable month index (1-12) based on Fiscal Year (Sep-Aug)
+                  const getPeriodMonth = (periodStr) => {
+                    if (!periodStr) return 0;
+
+                    // Handle Feedback Periods (Q1, Q2, etc.)
+                    if (periodStr === "Q1") return 3;   // Sep-Nov
+                    if (periodStr === "Q2") return 6;   // Dec-Feb
+                    if (periodStr === "Q3") return 9;   // Mar-May
+                    if (periodStr === "FINAL") return 12; // Jun-Aug
+
+                    const suffix = periodStr.slice(4); // Remove year "2025"
+
+                    // Handle Hito Periods (M01, Q1, S1, etc.)
+                    if (suffix.startsWith("M")) {
+                      const m = parseInt(suffix.slice(1));
+                      // Map calendar month to fiscal month (Sep=1 ... Aug=12)
+                      return m >= 9 ? m - 8 : m + 4;
+                    }
+                    if (suffix.startsWith("Q")) {
+                      const q = parseInt(suffix.slice(1));
+                      // Assuming Q1=Sep-Nov (1), Q2=Dec-Feb (2), Q3=Mar-May (3), Q4=Jun-Aug (4)
+                      return q * 3;
+                    }
+                    if (suffix.startsWith("S")) {
+                      const s = parseInt(suffix.slice(1));
+                      return s * 6;
+                    }
+                    if (suffix === "FINAL") return 12;
+
+                    return 12;
+                  };
+
+                  const feedbackLimit = getPeriodMonth(p);
+                  const previousLimit = feedbackLimit - 3; // Assuming 3-month windows
+
+                  // Check if there is ANY evaluation in the specific window of this feedback
+                  const hasDataInPeriod = (
+                    dashEmpleadoData.objetivos?.some(obj =>
+                      obj.hitos?.some(h => {
+                        const m = getPeriodMonth(h.periodo);
+                        return m > previousLimit && m <= feedbackLimit && h.actual !== null && h.actual !== undefined;
+                      })
+                    ) ||
+                    dashEmpleadoData.aptitudes?.some(apt =>
+                      apt.hitos?.some(h => {
+                        const m = getPeriodMonth(h.periodo);
+                        return m > previousLimit && m <= feedbackLimit && h.actual !== null && h.actual !== undefined;
+                      })
+                    )
+                  );
+
+                  if (!hasDataInPeriod) {
+                    return { objetivos: null, competencias: null, global: null, detailsObj: [], detailsComp: [] };
+                  }
+
                   // Objetivos
                   let totalObjScore = 0;
-                  let totalObjWeight = 0;
+                  let totalObjBaseWeight = 0;
                   const detailsObj = [];
 
                   dashEmpleadoData.objetivos?.forEach(obj => {
-                    const hito = obj.hitos?.find(h => h.periodo === p);
-                    if (hito && hito.actual !== null) {
-                      totalObjScore += Number(hito.actual) * (obj.peso || 0);
-                      totalObjWeight += (obj.peso || 0);
-                      detailsObj.push({ nombre: obj.nombre, score: Number(hito.actual) });
+                    // Filter hitos up to the feedback period
+                    const relevantHitos = obj.hitos?.filter(h => getPeriodMonth(h.periodo) <= feedbackLimit) || [];
+
+                    // Recalculate progress based on relevant hitos
+                    let score = 0;
+                    if (relevantHitos.length > 0) {
+                      const isCumulative = obj.metas?.some(m => m.acumulativa || m.modoAcumulacion === 'acumulativo');
+                      const progresos = relevantHitos.map(h => h.actual ?? 0);
+
+                      score = isCumulative
+                        ? Math.max(...progresos, 0)
+                        : Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length);
                     }
+
+                    const hasPermiteOver = obj.metas?.some(m => m.permiteOver) || obj.hitos?.some(h => h.metas?.some(m => m.permiteOver));
+                    const effectiveScore = hasPermiteOver ? score : Math.min(score, 100);
+
+                    totalObjScore += effectiveScore * (obj.peso || 0);
+                    totalObjBaseWeight += (obj.pesoBase || obj.peso || 0);
+
+                    // Weighted contribution for details (score * weight / 100)
+                    const weightedScore = (effectiveScore * (obj.peso || 0)) / 100;
+                    detailsObj.push({ nombre: obj.nombre, score: weightedScore, rawScore: effectiveScore });
                   });
-                  const scoreObj = totalObjWeight > 0 ? (totalObjScore / totalObjWeight) : 0;
+                  const scoreObjRaw = totalObjScore / 100; // Always normalize to 100 base
+                  const scoreObj = scoreObjRaw * 0.7; // Weighted contribution (Max 70)
 
                   // Competencias
                   let totalCompScore = 0;
-                  let totalCompWeight = 0;
+                  let compCount = 0;
                   const detailsComp = [];
 
                   dashEmpleadoData.aptitudes?.forEach(apt => {
-                    const hito = apt.hitos?.find(h => h.periodo === p);
-                    if (hito && hito.actual !== null) {
-                      totalCompScore += Number(hito.actual) * (apt.peso || 0);
-                      totalCompWeight += (apt.peso || 0);
-                      detailsComp.push({ nombre: apt.nombre, score: Number(hito.actual) });
+                    // Filter hitos up to the feedback period
+                    const relevantHitos = apt.hitos?.filter(h => getPeriodMonth(h.periodo) <= feedbackLimit) || [];
+
+                    // Recalculate score based on relevant hitos (ignoring nulls)
+                    let score = 0;
+                    const puntuaciones = relevantHitos
+                      .map(h => h.actual)
+                      .filter(val => val !== null && val !== undefined);
+
+                    if (puntuaciones.length > 0) {
+                      score = Math.round(puntuaciones.reduce((a, b) => a + b, 0) / puntuaciones.length);
                     }
+
+                    totalCompScore += score;
+                    compCount++;
+
+                    // For simple average, we just show the score. 
+                    detailsComp.push({ nombre: apt.nombre, score: score, rawScore: score });
                   });
-                  const scoreComp = totalCompWeight > 0 ? (totalCompScore / totalCompWeight) : 0;
+                  const scoreCompRaw = compCount > 0 ? (totalCompScore / compCount) : 0;
+                  const scoreComp = scoreCompRaw * 0.3; // Weighted contribution (Max 30)
 
                   // Global
-                  const wObj = resumenEmpleado?.objetivos?.peso || 80;
-                  const wComp = resumenEmpleado?.aptitudes?.peso || 20;
-                  const global = ((scoreObj * wObj) + (scoreComp * wComp)) / (wObj + wComp);
+                  const global = scoreObj + scoreComp;
 
                   return { objetivos: scoreObj, competencias: scoreComp, global, detailsObj, detailsComp };
                 };
@@ -1042,7 +1153,7 @@ export default function EvaluacionFlujo() {
                                 {breakdown.detailsObj.map((d, i) => (
                                   <div key={i} className="flex justify-between text-xs text-slate-600">
                                     <span className="truncate max-w-[140px]">{d.nombre}</span>
-                                    <span className="font-semibold">{Math.round(d.score)}%</span>
+                                    <span className="font-semibold">{d.score !== null ? `${Math.round(d.score)}%` : "-"}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1058,7 +1169,7 @@ export default function EvaluacionFlujo() {
                                 {breakdown.detailsComp.map((d, i) => (
                                   <div key={i} className="flex justify-between text-xs text-slate-600">
                                     <span className="truncate max-w-[140px]">{d.nombre}</span>
-                                    <span className="font-semibold">{Math.round(d.score)}%</span>
+                                    <span className="font-semibold">{d.score !== null ? `${Math.round(d.score)}%` : "-"}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1083,28 +1194,33 @@ export default function EvaluacionFlujo() {
 
                       {/* ACCIONES */}
                       <div className="flex items-center justify-between pt-2 gap-2">
-                        <Badge variant="outline" className={`${(fb.estado === "SENT" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED") ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                          {(() => {
-                            if (fb.estado === "SENT") return "Enviado al empleado";
-                            if (fb.estado === "PENDING_HR") return "Enviado a RRHH";
-                            if (fb.estado === "CLOSED") return "Finalizado";
+                        <div className="flex gap-2">
+                          {/* Chronological State Badge */}
+                          <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
+                            {(() => {
+                              const timeline = [
+                                { id: "Q1", date: `${anio - 1}-12-01` },
+                                { id: "Q2", date: `${anio}-03-01` },
+                                { id: "Q3", date: `${anio}-06-01` },
+                                { id: "FINAL", date: `${anio}-09-01` }
+                              ];
+                              const item = timeline.find(t => t.id === periodo);
+                              if (item) {
+                                const startDate = new Date(item.date);
+                                const deadline = new Date(item.date);
+                                deadline.setDate(deadline.getDate() + 9); // 10 days window (1st to 10th)
 
-                            // Check Vencido
-                            const timeline = [
-                              { id: "Q1", date: `${anio - 1}-11-01` },
-                              { id: "Q2", date: `${anio}-02-01` },
-                              { id: "Q3", date: `${anio}-05-01` },
-                              { id: "FINAL", date: `${anio}-08-30` }
-                            ];
-                            const item = timeline.find(t => t.id === periodo);
-                            if (item) {
-                              const deadline = new Date(item.date);
-                              deadline.setDate(deadline.getDate() + 30);
-                              if (new Date() > deadline) return "Vencido";
-                            }
-                            return "Borrador";
-                          })()}
-                        </Badge>
+                                // SIMULATED DATE: Forcing 2024-12-04 because system time is 2025
+                                const now = new Date("2024-12-04");
+
+                                if (now < startDate) return "Futuro";
+                                if (now > deadline) return "Vencido";
+                                return "Actual";
+                              }
+                              return "-";
+                            })()}
+                          </Badge>
+                        </div>
                         <div className="flex gap-2">
                           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleSaveFeedback(periodo, fb.comentario, "DRAFT")}>
                             <Save className="w-3 h-3 mr-1" /> Guardar
@@ -1150,32 +1266,7 @@ export default function EvaluacionFlujo() {
                         </div>
                       </div>
 
-                      {/* EMPLOYEE RESPONSE */}
-                      {(fb.estado === "SENT" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED") && (
-                        <div className="bg-slate-50 p-3 rounded border border-slate-100 mt-3 space-y-2 opacity-80">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-2">
-                            <UserCircle2 className="w-3 h-3" /> Respuesta del Colaborador
-                          </label>
-                          <div className="flex items-center gap-4 text-xs">
-                            <div className={`flex items-center gap-1 ${fb.acuerdo === true ? "text-emerald-700 font-bold" : "text-slate-400"}`}>
-                              <div className={`w-3 h-3 rounded-full border ${fb.acuerdo === true ? "bg-emerald-500 border-emerald-500" : "border-slate-300"}`}></div>
-                              Estoy de acuerdo
-                            </div>
-                            <div className={`flex items-center gap-1 ${fb.acuerdo === false ? "text-rose-700 font-bold" : "text-slate-400"}`}>
-                              <div className={`w-3 h-3 rounded-full border ${fb.acuerdo === false ? "bg-rose-500 border-rose-500" : "border-slate-300"}`}></div>
-                              En desacuerdo
-                            </div>
-                          </div>
-                          {fb.comentarioEmpleado && (
-                            <p className="text-xs text-slate-600 italic border-l-2 border-slate-300 pl-2">
-                              "{fb.comentarioEmpleado}"
-                            </p>
-                          )}
-                          {!fb.comentarioEmpleado && (
-                            <p className="text-[10px] text-slate-400 italic">Sin comentarios del colaborador</p>
-                          )}
-                        </div>
-                      )}
+
                     </CardContent>
                   </Card>
                 );
