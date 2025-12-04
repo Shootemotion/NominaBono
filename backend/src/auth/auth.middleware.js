@@ -10,41 +10,41 @@ import Sector from "../models/Sector.model.js";
  */
 const roleCaps = {
   superadmin: ["*"],
-  
+
   rrhh: [
-    "estructura:ver","estructura:crear","estructura:editar","estructura:eliminar",
-    "nomina:ver","nomina:crear","nomina:editar","nomina:eliminar","nomina:evaluar",
-    "objetivos:ver","objetivos:crear","objetivos:editar","objetivos:eliminar",
-    "aptitudes:ver","aptitudes:crear","aptitudes:editar","aptitudes:eliminar",
-    "asignaciones:ver","asignaciones:editar", "rrhh:evaluaciones:ver",
+    "estructura:ver", "estructura:crear", "estructura:editar", "estructura:eliminar",
+    "nomina:ver", "nomina:crear", "nomina:editar", "nomina:eliminar", "nomina:evaluar",
+    "objetivos:ver", "objetivos:crear", "objetivos:editar", "objetivos:eliminar",
+    "aptitudes:ver", "aptitudes:crear", "aptitudes:editar", "aptitudes:eliminar",
+    "asignaciones:ver", "asignaciones:editar", "rrhh:evaluaciones:ver",
     "rrhh:evaluaciones:cierre",
     "rrhh:evaluaciones:reabrir",
     "usuarios:manage"
   ],
   jefe_area: [
-    "estructura:ver","nomina:ver","nomina:editar","nomina:evaluar",
-    "objetivos:ver","objetivos:editar",
-    "aptitudes:ver","aptitudes:editar",
-    "asignaciones:ver","asignaciones:editar",
+    "estructura:ver", "nomina:ver", "nomina:editar", "nomina:evaluar",
+    "objetivos:ver", "objetivos:editar",
+    "aptitudes:ver", "aptitudes:editar",
+    "asignaciones:ver", "asignaciones:editar",
   ],
   jefe_sector: [
-    "estructura:ver","nomina:ver","nomina:evaluar",
-    "objetivos:ver","nomina:editar",
+    "estructura:ver", "nomina:ver", "nomina:evaluar",
+    "objetivos:ver", "nomina:editar",
     "aptitudes:ver",
-    "asignaciones:ver","asignaciones:editar",
+    "asignaciones:ver", "asignaciones:editar",
   ],
   directivo: [
-    "estructura:ver","estructura:crear","estructura:editar","estructura:eliminar",
-    "nomina:ver","nomina:crear","nomina:editar","nomina:eliminar","nomina:evaluar",
-    "objetivos:ver","objetivos:crear","objetivos:editar","objetivos:eliminar",
-    "aptitudes:ver","aptitudes:crear","aptitudes:editar","aptitudes:eliminar",
-    "asignaciones:ver","asignaciones:editar", "rrhh:evaluaciones:ver",
+    "estructura:ver", "estructura:crear", "estructura:editar", "estructura:eliminar",
+    "nomina:ver", "nomina:crear", "nomina:editar", "nomina:eliminar", "nomina:evaluar",
+    "objetivos:ver", "objetivos:crear", "objetivos:editar", "objetivos:eliminar",
+    "aptitudes:ver", "aptitudes:crear", "aptitudes:editar", "aptitudes:eliminar",
+    "asignaciones:ver", "asignaciones:editar", "rrhh:evaluaciones:ver",
     "rrhh:evaluaciones:cierre",
     "rrhh:evaluaciones:reabrir",
     "usuarios:manage"
 
   ],
-  visor: ["estructura:ver","nomina:ver","aptitudes:ver"],
+  visor: ["estructura:ver", "nomina:ver", "aptitudes:ver"],
 };
 
 const arrayUnion = (a = [], b = []) =>
@@ -83,9 +83,9 @@ export const authenticateJWT = async (req, res, next) => {
       // ids en string o null
       const empleadoId = userDoc.empleado?._id ? String(userDoc.empleado._id) : null;
       const areaId = userDoc.empleado?.area?._id ? String(userDoc.empleado.area._id)
-                    : userDoc.empleado?.area ? String(userDoc.empleado.area) : null;
+        : userDoc.empleado?.area ? String(userDoc.empleado.area) : null;
       const sectorId = userDoc.empleado?.sector?._id ? String(userDoc.empleado.sector._id)
-                      : userDoc.empleado?.sector ? String(userDoc.empleado.sector) : null;
+        : userDoc.empleado?.sector ? String(userDoc.empleado.sector) : null;
 
       // Calcular referentes (castear a ObjectId siempre)
       let referenteAreas = [];
@@ -107,9 +107,9 @@ export const authenticateJWT = async (req, res, next) => {
       // 🔹 Extender permisos si es referente
       if (referenteAreas.length > 0 || referenteSectors.length > 0) {
         permisos = arrayUnion(permisos, [
-          "nomina:ver","nomina:evaluar","nomina:editar","nomina:crear",
-          "objetivos:ver","objetivos:editar",
-          "aptitudes:ver","aptitudes:editar",
+          "nomina:ver", "nomina:evaluar", "nomina:editar", "nomina:crear",
+          "objetivos:ver", "objetivos:editar",
+          "aptitudes:ver", "aptitudes:editar",
         ]);
       }
 
@@ -145,8 +145,8 @@ export const authenticateJWT = async (req, res, next) => {
         isSuper: rol === "superadmin",
         isRRHH: rol === "rrhh",
         isDirectivo: rol === "directivo",
-        isJefeArea: rolEfectivo === "jefe_area",
-        isJefeSector: rolEfectivo === "jefe_sector",
+        isJefeArea: rolEfectivo === "jefe_area" || referenteAreas.length > 0,
+        isJefeSector: rolEfectivo === "jefe_sector" || referenteSectors.length > 0,
         referenteAreas,
         referenteSectors
       };

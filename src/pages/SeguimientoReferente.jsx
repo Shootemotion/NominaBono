@@ -9,6 +9,7 @@ import FilterBar from "@/components/seguimiento/FilterBar";
 import GanttView from "@/components/seguimiento/GanttView";
 import CalendarView from "@/components/seguimiento/CalendarView";
 import { Button } from "@/components/ui/button";
+import { BarChart3, Calendar, RefreshCw } from "lucide-react";
 
 /* ========= utils de agrupación/normalización ========= */
 
@@ -157,6 +158,13 @@ export default function SeguimientoReferente() {
   const esVisor = user?.rol === "visor";
   const puedeVer = esReferente || esDirector || esSuperAdmin || esVisor;
 
+  // Local calculation to ensure we catch "Hybrid" roles correctly
+  // even if the backend flag hasn't updated or is strict.
+  const isJefeArea = Boolean(
+    user?.isJefeArea ||
+    (Array.isArray(user?.referenteAreas) && user.referenteAreas.length > 0)
+  );
+
   const currentYear = new Date().getFullYear();
 
   // estado
@@ -176,6 +184,7 @@ export default function SeguimientoReferente() {
   const [zoom, setZoom] = useState("mes");
   const [dueOnly, setDueOnly] = useState(false);
   const [sortDir, setSortDir] = useState("asc");
+  const [ganttGrouping, setGanttGrouping] = useState("sector_estado"); // "sector_estado" | "estado_sector"
   const [groupBy, setGroupBy] = useState("empleado");
 
   // carga de datos robusta
@@ -188,17 +197,22 @@ export default function SeguimientoReferente() {
 
         // 1. Recolectar respuestas crudas según rol
         if (esReferente) {
-          if (user?.referenteAreas?.length) {
-            const results = await Promise.all(
-              user.referenteAreas.map((a) => dashArea(a, anio))
-            );
-            rawResponses = results.flat();
-          } else if (user?.referenteSectors?.length) {
-            const results = await Promise.all(
-              user.referenteSectors.map((s) => dashSector(s, anio))
-            );
-            rawResponses = results.flat();
+          const promises = [];
+
+          // Hybrid Logic:
+          // 1. If user is explicitly a Jefe de Area (or has areas assigned), fetch their areas.
+          if (isJefeArea && user?.referenteAreas?.length) {
+            promises.push(...user.referenteAreas.map((a) => dashArea(a, anio)));
           }
+
+          // 2. Always fetch assigned sectors.
+          //    (This handles Pure Sector Managers AND Hybrid users' extra sectors)
+          if (user?.referenteSectors?.length) {
+            promises.push(...user.referenteSectors.map((s) => dashSector(s, anio)));
+          }
+
+          const results = await Promise.all(promises);
+          rawResponses = results.flat();
         } else if (esDirector) {
           const [allAreas, allSectores] = await Promise.all([
             dashArea(null, anio),
@@ -292,7 +306,7 @@ export default function SeguimientoReferente() {
         setLoading(false);
       }
     })();
-  }, [user, anio, puedeVer, esReferente, esDirector, esVisor]);
+  }, [user, anio, puedeVer, esReferente, esDirector, esVisor, isJefeArea]);
 
   if (!puedeVer) {
     return (
@@ -504,7 +518,8 @@ export default function SeguimientoReferente() {
               showEmpHints,
               setShowEmpHints,
               mainTab,
-              setMainTab
+              setMainTab,
+              hideAreaFilter: !isJefeArea && !esDirector && !esSuperAdmin && !esVisor
             }}
           />
         </div>
@@ -549,114 +564,135 @@ export default function SeguimientoReferente() {
         {/* Controles superiores */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
-            <Button
-              variant={view === "gantt" ? "default" : "outline"}
-              onClick={() => setView("gantt")}
-            >
-              📊 Gantt
-            </Button>
-            <Button
-              variant={view === "agenda" ? "default" : "outline"}
-              onClick={() => setView("agenda")}
-            >
-              📅 Calendario
-            </Button>
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+              <button
+                onClick={() => setView("gantt")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2 ${view === "gantt"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+                  }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                Gantt
+              </button>
+              <button
+                onClick={() => setView("calendar")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2 ${view === "calendar"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+                  }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Calendario
+              </button>
+            </div>
           </div>
 
-          {mainTab === "objetivos" && (
+          <div className="flex items-center gap-3">
+            {/* Filtros de estado rápidos */}
+            <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-100">
+              <span className="text-[10px] font-medium text-slate-400 px-2 uppercase tracking-wider">Vencimientos</span>
+              <button
+                onClick={() => setDueOnly(false)}
+                className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${!dueOnly
+                  ? "bg-white text-slate-700 shadow-sm ring-1 ring-slate-200"
+                  : "text-slate-500 hover:text-slate-700"
+                  }`}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setDueOnly(true)}
+                className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${dueOnly
+                  ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                  : "text-slate-500 hover:text-rose-600"
+                  }`}
+              >
+                Vencidos/Por Vencer
+              </button>
+            </div>
+
+            <div className="h-4 w-px bg-slate-200 mx-1" />
+
+            {/* Selector de Agrupación */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Tipo</span>
-              <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-lg">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Agrupar</span>
+              <select
+                className="rounded-lg border border-slate-200 bg-slate-50 text-[10px] font-medium px-2 py-1 outline-none focus:ring-2 focus:ring-blue-100"
+                value={ganttGrouping}
+                onChange={(e) => setGanttGrouping(e.target.value)}
+              >
+                <option value="sector_estado">Sector &gt; Estado</option>
+                <option value="estado_sector">Estado &gt; Sector</option>
+              </select>
+            </div>
+
+            <div className="h-4 w-px bg-slate-200 mx-1" />
+
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Orden</span>
+              <div className="flex bg-slate-100 p-0.5 rounded-lg">
                 <button
-                  className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "todos"
-                    ? "bg-white text-slate-900 shadow-sm font-medium"
-                    : "text-slate-600 hover:text-slate-900"
+                  onClick={() => setSortDir("asc")}
+                  className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${sortDir === "asc"
+                    ? "bg-white text-slate-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
                     }`}
-                  onClick={() => setTipoFiltro("todos")}
                 >
-                  Todos
+                  ↑ Asc
                 </button>
                 <button
-                  className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "objetivo"
-                    ? "bg-white text-slate-900 shadow-sm font-medium"
-                    : "text-slate-600 hover:text-slate-900"
+                  onClick={() => setSortDir("desc")}
+                  className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${sortDir === "desc"
+                    ? "bg-white text-slate-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
                     }`}
-                  onClick={() => setTipoFiltro("objetivo")}
                 >
-                  🎯 Objetivos
-                </button>
-                <button
-                  className={`px-3 py-1 text-xs rounded transition-colors ${tipoFiltro === "aptitud"
-                    ? "bg-white text-slate-900 shadow-sm font-medium"
-                    : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  onClick={() => setTipoFiltro("aptitud")}
-                >
-                  💡 Aptitudes
+                  ↓ Desc
                 </button>
               </div>
             </div>
-          )}
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Vencimientos</span>
-            <button
-              className={`text-xs rounded-md border px-3 py-1 ${dueOnly
-                ? "bg-emerald-600 text-white border-emerald-600"
-                : "hover:bg-slate-50"
-                }`}
-              onClick={() => setDueOnly((v) => !v)}
-            >
-              {dueOnly ? "Solo vencidos · 7d" : "Todos"}
-            </button>
-          </div>
+            {view === "gantt" && (
+              <>
+                <div className="h-4 w-px bg-slate-200 mx-1" />
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Meses</span>
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                    <button
+                      onClick={() => setZoom("mes")}
+                      className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${zoom === "mes"
+                        ? "bg-white text-slate-700 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      Meses
+                    </button>
+                    <button
+                      onClick={() => setZoom("trimestre")}
+                      className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${zoom === "trimestre"
+                        ? "bg-white text-slate-700 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      Trimestres
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Orden</span>
-            <button
-              className={`text-xs rounded-md border px-3 py-1 hover:bg-slate-50 ${sortDir === "asc" ? "font-semibold" : ""
-                }`}
-              onClick={() => setSortDir("asc")}
-            >
-              ↑ Asc
-            </button>
-            <button
-              className={`text-xs rounded-md border px-3 py-1 hover:bg-slate-50 ${sortDir === "desc" ? "font-semibold" : ""
-                }`}
-              onClick={() => setSortDir("desc")}
-            >
-              ↓ Desc
-            </button>
-          </div>
+            <div className="h-4 w-px bg-slate-200 mx-1" />
 
-          {view === "gantt" && (
-            <div className="flex gap-2">
-              <Button
-                variant={zoom === "mes" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setZoom("mes")}
-              >
-                Meses
-              </Button>
-              <Button
-                variant={zoom === "trimestre" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setZoom("trimestre")}
-              >
-                Trimestres
-              </Button>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
             <Button
+              variant="ghost"
               size="sm"
-              variant="outline"
-              className="text-xs"
               onClick={limpiarSeleccion}
               disabled={!selectedEmpleadoId}
+              className="h-7 text-[10px] text-slate-500 hover:text-slate-700"
             >
-              🔄 Limpiar selección
+              <RefreshCw className="w-3 h-3 mr-1.5" />
+              Limpiar selección
             </Button>
           </div>
         </div>
@@ -689,6 +725,8 @@ export default function SeguimientoReferente() {
                 dueOnly={dueOnly}
                 sortDir={sortDir}
                 selectedEmpleadoId={selectedEmpleadoId}
+                hideAreaGroup={!isJefeArea && !esDirector && !esSuperAdmin && !esVisor}
+                ganttGrouping={ganttGrouping}
               />
             )}
           </div>

@@ -239,16 +239,56 @@ export default function EvaluacionFlujo() {
   // Periodo Global de Evaluación (por defecto el de la URL)
   const [periodoGlobal, setPeriodoGlobal] = useState(periodo || null);
 
-  // Cargar info empleado
+  // Cargar info empleado y validar permisos
   useEffect(() => {
     (async () => {
-      if (!selectedEmpleadoId || empleadoInfo) return;
+      if (!selectedEmpleadoId || empleadoInfo) {
+        // Si ya tenemos info, validamos permisos aquí también por si acaso
+        if (empleadoInfo && esReferente && !esDirector && !esSuperAdmin && !esVisor) {
+          const empSectorId = String(empleadoInfo.sector?._id || empleadoInfo.sector);
+          const empAreaId = String(empleadoInfo.area?._id || empleadoInfo.area);
+
+          const hasSectorAccess = user.referenteSectors?.some(s => String(s._id || s) === empSectorId);
+          const hasAreaAccess = user.referenteAreas?.some(a => String(a._id || a) === empAreaId);
+
+          if (!hasSectorAccess && !hasAreaAccess) {
+            // Si es el propio empleado, permitir (autoevaluación o ver su propia eval)
+            // Pero 'esReferente' suele ser para ver a OTROS.
+            // Si user.empleado._id === selectedEmpleadoId -> OK.
+            if (user.empleado?._id !== selectedEmpleadoId) {
+              toast.error("No tienes permisos para ver este empleado.");
+              navigate("/seguimiento"); // O a donde corresponda
+              return;
+            }
+          }
+        }
+        return;
+      }
+
       try {
         const emp = await api(`/empleados/${selectedEmpleadoId}`);
+
+        // Validar permisos al cargar
+        if (esReferente && !esDirector && !esSuperAdmin && !esVisor) {
+          const empSectorId = String(emp.sector?._id || emp.sector);
+          const empAreaId = String(emp.area?._id || emp.area);
+
+          const hasSectorAccess = user.referenteSectors?.some(s => String(s._id || s) === empSectorId);
+          const hasAreaAccess = user.referenteAreas?.some(a => String(a._id || a) === empAreaId);
+
+          if (!hasSectorAccess && !hasAreaAccess) {
+            if (user.empleado?._id !== emp._id) {
+              toast.error("No tienes permisos para ver este empleado.");
+              navigate("/seguimiento");
+              return;
+            }
+          }
+        }
+
         setEmpleadoInfo(emp);
       } catch (e) { console.error(e); }
     })();
-  }, [selectedEmpleadoId, empleadoInfo]);
+  }, [selectedEmpleadoId, empleadoInfo, esReferente, esDirector, esSuperAdmin, esVisor, user, navigate]);
 
   // Cargar Dashboard
   useEffect(() => {
