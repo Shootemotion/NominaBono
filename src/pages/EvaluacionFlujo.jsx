@@ -955,16 +955,83 @@ export default function EvaluacionFlujo() {
                 const getBreakdown = (p) => {
                   if (!dashEmpleadoData) return { objetivos: 0, competencias: 0, global: 0, detailsObj: [], detailsComp: [] };
 
+                  // Helper to convert period to a comparable month index (1-12) based on Fiscal Year (Sep-Aug)
+                  const getPeriodMonth = (periodStr) => {
+                    if (!periodStr) return 0;
+
+                    // Handle Feedback Periods (Q1, Q2, etc.)
+                    if (periodStr === "Q1") return 3;   // Sep-Nov
+                    if (periodStr === "Q2") return 6;   // Dec-Feb
+                    if (periodStr === "Q3") return 9;   // Mar-May
+                    if (periodStr === "FINAL") return 12; // Jun-Aug
+
+                    const suffix = periodStr.slice(4); // Remove year "2025"
+
+                    // Handle Hito Periods (M01, Q1, S1, etc.)
+                    if (suffix.startsWith("M")) {
+                      const m = parseInt(suffix.slice(1));
+                      // Map calendar month to fiscal month (Sep=1 ... Aug=12)
+                      return m >= 9 ? m - 8 : m + 4;
+                    }
+                    if (suffix.startsWith("Q")) {
+                      const q = parseInt(suffix.slice(1));
+                      // Assuming Q1=Sep-Nov (1), Q2=Dec-Feb (2), Q3=Mar-May (3), Q4=Jun-Aug (4)
+                      return q * 3;
+                    }
+                    if (suffix.startsWith("S")) {
+                      const s = parseInt(suffix.slice(1));
+                      return s * 6;
+                    }
+                    if (suffix === "FINAL") return 12;
+
+                    return 12;
+                  };
+
+                  const feedbackLimit = getPeriodMonth(p);
+                  const previousLimit = feedbackLimit - 3; // Assuming 3-month windows
+
+                  // Check if there is ANY evaluation in the specific window of this feedback
+                  const hasDataInPeriod = (
+                    dashEmpleadoData.objetivos?.some(obj =>
+                      obj.hitos?.some(h => {
+                        const m = getPeriodMonth(h.periodo);
+                        return m > previousLimit && m <= feedbackLimit && h.actual !== null && h.actual !== undefined;
+                      })
+                    ) ||
+                    dashEmpleadoData.aptitudes?.some(apt =>
+                      apt.hitos?.some(h => {
+                        const m = getPeriodMonth(h.periodo);
+                        return m > previousLimit && m <= feedbackLimit && h.actual !== null && h.actual !== undefined;
+                      })
+                    )
+                  );
+
+                  if (!hasDataInPeriod) {
+                    return { objetivos: null, competencias: null, global: null, detailsObj: [], detailsComp: [] };
+                  }
+
                   // Objetivos
                   let totalObjScore = 0;
                   let totalObjBaseWeight = 0;
                   const detailsObj = [];
 
                   dashEmpleadoData.objetivos?.forEach(obj => {
-                    const score = obj.progreso !== undefined ? obj.progreso : 0;
+                    // Filter hitos up to the feedback period
+                    const relevantHitos = obj.hitos?.filter(h => getPeriodMonth(h.periodo) <= feedbackLimit) || [];
+
+                    // Recalculate progress based on relevant hitos
+                    let score = 0;
+                    if (relevantHitos.length > 0) {
+                      const isCumulative = obj.metas?.some(m => m.acumulativa || m.modoAcumulacion === 'acumulativo');
+                      const progresos = relevantHitos.map(h => h.actual ?? 0);
+
+                      score = isCumulative
+                        ? Math.max(...progresos, 0)
+                        : Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length);
+                    }
+
                     const hasPermiteOver = obj.metas?.some(m => m.permiteOver) || obj.hitos?.some(h => h.metas?.some(m => m.permiteOver));
                     const effectiveScore = hasPermiteOver ? score : Math.min(score, 100);
-                    console.log('DEBUG OBJ:', obj.nombre, score, obj.peso, obj.pesoBase);
 
                     totalObjScore += effectiveScore * (obj.peso || 0);
                     totalObjBaseWeight += (obj.pesoBase || obj.peso || 0);
@@ -982,7 +1049,18 @@ export default function EvaluacionFlujo() {
                   const detailsComp = [];
 
                   dashEmpleadoData.aptitudes?.forEach(apt => {
-                    const score = apt.puntuacion !== undefined ? apt.puntuacion : 0;
+                    // Filter hitos up to the feedback period
+                    const relevantHitos = apt.hitos?.filter(h => getPeriodMonth(h.periodo) <= feedbackLimit) || [];
+
+                    // Recalculate score based on relevant hitos (ignoring nulls)
+                    let score = 0;
+                    const puntuaciones = relevantHitos
+                      .map(h => h.actual)
+                      .filter(val => val !== null && val !== undefined);
+
+                    if (puntuaciones.length > 0) {
+                      score = Math.round(puntuaciones.reduce((a, b) => a + b, 0) / puntuaciones.length);
+                    }
 
                     totalCompScore += score;
                     compCount++;
@@ -1116,28 +1194,33 @@ export default function EvaluacionFlujo() {
 
                       {/* ACCIONES */}
                       <div className="flex items-center justify-between pt-2 gap-2">
-                        <Badge variant="outline" className={`${(fb.estado === "SENT" || fb.estado === "PENDING_HR" || fb.estado === "CLOSED") ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                          {(() => {
-                            if (fb.estado === "SENT") return "Enviado al empleado";
-                            if (fb.estado === "PENDING_HR") return "Enviado a RRHH";
-                            if (fb.estado === "CLOSED") return "Finalizado";
+                        <div className="flex gap-2">
+                          {/* Chronological State Badge */}
+                          <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
+                            {(() => {
+                              const timeline = [
+                                { id: "Q1", date: `${anio - 1}-12-01` },
+                                { id: "Q2", date: `${anio}-03-01` },
+                                { id: "Q3", date: `${anio}-06-01` },
+                                { id: "FINAL", date: `${anio}-09-01` }
+                              ];
+                              const item = timeline.find(t => t.id === periodo);
+                              if (item) {
+                                const startDate = new Date(item.date);
+                                const deadline = new Date(item.date);
+                                deadline.setDate(deadline.getDate() + 9); // 10 days window (1st to 10th)
 
-                            // Check Vencido
-                            const timeline = [
-                              { id: "Q1", date: `${anio - 1}-11-01` },
-                              { id: "Q2", date: `${anio}-02-01` },
-                              { id: "Q3", date: `${anio}-05-01` },
-                              { id: "FINAL", date: `${anio}-08-30` }
-                            ];
-                            const item = timeline.find(t => t.id === periodo);
-                            if (item) {
-                              const deadline = new Date(item.date);
-                              deadline.setDate(deadline.getDate() + 30);
-                              if (new Date() > deadline) return "Vencido";
-                            }
-                            return "Borrador";
-                          })()}
-                        </Badge>
+                                // SIMULATED DATE: Forcing 2024-12-04 because system time is 2025
+                                const now = new Date("2024-12-04");
+
+                                if (now < startDate) return "Futuro";
+                                if (now > deadline) return "Vencido";
+                                return "Actual";
+                              }
+                              return "-";
+                            })()}
+                          </Badge>
+                        </div>
                         <div className="flex gap-2">
                           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleSaveFeedback(periodo, fb.comentario, "DRAFT")}>
                             <Save className="w-3 h-3 mr-1" /> Guardar

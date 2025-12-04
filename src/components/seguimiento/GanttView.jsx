@@ -131,7 +131,7 @@ function getHybridStatus(hito, fechaRef, itemType) {
 function buildColumns(anio) {
   const cols = [];
   const startMonth = 9; // Septiembre
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 13; i++) { // 13 months to include September of next year
     let m = startMonth + i;
     let y = anio;
     if (m > 12) {
@@ -176,9 +176,70 @@ export default function GanttView({
           if (seenIds.has(uniqueKey)) return;
           seenIds.add(uniqueKey);
 
-          const fechaRef = hito.fecha
-            ? new Date(hito.fecha)
-            : parsePeriodoToDate(hito.periodo);
+          let fechaRef;
+          let periodKey = hito.periodo;
+
+          // Special handling for Feedback items (Shift to next month)
+          if (item._tipo === "feedback") {
+            let y = 0;
+            let q = 0;
+            let isFinal = false;
+
+            const qMatch = hito.periodo.match(/^(\d{4})Q([1-4])$/i);
+            const fMatch = hito.periodo.match(/^(\d{4})FINAL$/i);
+            const simpleQMatch = hito.periodo.match(/^Q([1-4])$/i);
+            const simpleFMatch = hito.periodo.match(/^FINAL$/i);
+
+            if (qMatch) {
+              y = parseInt(qMatch[1]);
+              q = parseInt(qMatch[2]);
+            } else if (fMatch) {
+              y = parseInt(fMatch[1]);
+              isFinal = true;
+            } else if (simpleQMatch) {
+              y = currentYear;
+              q = parseInt(simpleQMatch[1]);
+            } else if (simpleFMatch) {
+              y = currentYear;
+              isFinal = true;
+            }
+
+            if (q > 0) {
+              // Q1 (Nov) -> Dec of SAME year (y)
+              if (q === 1) {
+                fechaRef = new Date(y, 11, 10); // Dec 10, Year y
+                periodKey = `${y}M12`;
+              } else if (q === 2) {
+                // Q2 (Feb) -> Mar of NEXT year (y+1)
+                fechaRef = new Date(y + 1, 2, 10); // Mar 10
+                periodKey = `${y + 1}M03`;
+              } else if (q === 3) {
+                // Q3 (May) -> Jun of NEXT year (y+1)
+                fechaRef = new Date(y + 1, 5, 10); // Jun 10
+                periodKey = `${y + 1}M06`;
+              }
+            } else if (isFinal) {
+              // Final (Aug) -> Sep of NEXT year (y+1)
+              fechaRef = new Date(y + 1, 8, 10); // Sep 10
+              periodKey = `${y + 1}M09`;
+            }
+          }
+
+          if (!fechaRef) {
+            fechaRef = hito.fecha
+              ? new Date(hito.fecha)
+              : parsePeriodoToDate(hito.periodo);
+          }
+
+          if (!periodKey || (item._tipo !== "feedback" && hito.fecha)) {
+            if (hito.fecha) {
+              const d = new Date(hito.fecha);
+              const y = d.getUTCFullYear();
+              const m = d.getUTCMonth() + 1;
+              periodKey = `${y}M${String(m).padStart(2, "0")}`;
+            }
+          }
+
           const statusKey = getHybridStatus(hito, fechaRef, item._tipo);
 
           if (dueOnly && statusKey !== "vencido" && statusKey !== "por_vencer") return;
@@ -196,14 +257,6 @@ export default function GanttView({
           }
 
           const group = groupsMap.get(groupKey);
-
-          let periodKey = hito.periodo;
-          if (hito.fecha) {
-            const d = new Date(hito.fecha);
-            const y = d.getUTCFullYear();
-            const m = d.getUTCMonth() + 1;
-            periodKey = `${y}M${String(m).padStart(2, "0")}`;
-          }
 
           if (!group.itemsByPeriod[periodKey]) group.itemsByPeriod[periodKey] = [];
           group.itemsByPeriod[periodKey].push({
