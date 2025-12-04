@@ -123,13 +123,15 @@ export const updateHito = async (req, res) => {
     const baseUpdate = {
       year: Number(String(periodo).slice(0, 4)),
       periodo,
-      actual: scoreObjetivo,
-      escala,
+      actual: scoreObjetivo !== null ? scoreObjetivo : (req.body.actual ?? null),
+      escala: req.body.escala,
       comentarioManager: req.body.comentarioManager ?? null,
       comentario: comentario ?? null,
       metasResultados: metasProcesadas,
       estado: "MANAGER_DRAFT",
     };
+
+
 
     // Target de empleados
     let targetEmpleados = [empleadoId];
@@ -686,6 +688,8 @@ export async function createEvaluacion(req, res) {
       metasResultadosBody
     );
 
+
+
     evaluacion = new Evaluacion({
       empleado,
       plantillaId,
@@ -693,7 +697,8 @@ export async function createEvaluacion(req, res) {
       year: isNaN(anio) ? null : anio,
       creadoPor: req.user?._id || null,
       estado: "MANAGER_DRAFT",
-      actual: scoreObjetivo,
+      actual: scoreObjetivo !== null ? scoreObjetivo : (req.body.actual ?? null),
+      escala: req.body.escala ?? null,
       metasResultados: metasProcesadas,
       timeline: [
         {

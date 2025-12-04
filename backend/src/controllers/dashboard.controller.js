@@ -339,6 +339,16 @@ export const dashByEmpleado = async (req, res, next) => {
               ev.periodo === h.periodo
           );
 
+          if (p.tipo === "aptitud") {
+            console.log("DEBUG DASH APTITUD:", {
+              tplId: tplIdStr,
+              periodo: h.periodo,
+              found: !!evHito,
+              actual: evHito?.actual,
+              escala: evHito?.escala
+            });
+          }
+
           const metasCombinadas = (p.metas || []).map((m) => {
             const evaluada = evHito?.metasResultados?.find(
               (em) => String(em._id) === String(m._id) || em.nombre === m.nombre
@@ -373,12 +383,14 @@ export const dashByEmpleado = async (req, res, next) => {
 
         objetivosArr.push({
           _id: p._id,
+          tipo: "objetivo",
           nombre: p.nombre,
           descripcion: p.descripcion || "",
           metodo: p.metodo,
           target: p.target,
           unidad: p.unidad,
           peso,
+          pesoBase: basePeso,
           progreso,
           comentario: "",
           frecuencia: p.frecuencia,
@@ -390,17 +402,23 @@ export const dashByEmpleado = async (req, res, next) => {
         sumPesoObj += peso;
         weightedProgressSum += (progreso || 0) * peso;
       } else if (p.tipo === "aptitud") {
-        const puntuaciones = hitos.map((h) => h.actual ?? 0);
+        // Filter out nulls to calculate average only on evaluated hitos
+        const puntuaciones = hitos
+          .map(h => h.actual)
+          .filter(val => val !== null && val !== undefined);
+
         const puntuacion = puntuaciones.length
           ? Math.round(puntuaciones.reduce((a, b) => a + b, 0) / puntuaciones.length)
           : 0;
 
         aptitudesArr.push({
           _id: p._id,
+          tipo: "aptitud",
           nombre: p.nombre,
           descripcion: p.descripcion || "",
           metodo: p.metodo,
           peso,
+          pesoBase: basePeso,
           puntuacion,
           comentario: "",
           frecuencia: p.frecuencia,
@@ -414,9 +432,13 @@ export const dashByEmpleado = async (req, res, next) => {
       }
     }
 
-    const scoreObj = sumPesoObj > 0 ? weightedProgressSum / sumPesoObj : 0;
-    const scoreApt = sumPesoApt > 0 ? weightedAptScoreSum / sumPesoApt : 0;
-    const scoreFinal = Math.round((0.8 * scoreObj + 0.2 * scoreApt) * 10) / 10;
+    // Calculate sums of base weights
+    const sumBasePesoObj = objetivosArr.reduce((acc, curr) => acc + (curr.pesoBase || 0), 0);
+    const sumBasePesoApt = aptitudesArr.reduce((acc, curr) => acc + (curr.pesoBase || 0), 0);
+
+    const scoreObj = sumBasePesoObj > 0 ? weightedProgressSum / sumBasePesoObj : 0;
+    const scoreApt = sumBasePesoApt > 0 ? weightedAptScoreSum / sumBasePesoApt : 0;
+    const scoreFinal = Math.round((0.7 * scoreObj + 0.3 * scoreApt) * 10) / 10;
     const bono = (objetivosArr.length || aptitudesArr.length) ? `${scoreFinal}%` : null;
 
     return res.json({
