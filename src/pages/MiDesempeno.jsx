@@ -19,10 +19,16 @@ import {
   LayoutDashboard,
   ListChecks,
   FileSignature,
+  FileEdit,
+  Send,
+  Users,
+  CheckCircle,
+  Activity,
   Info,
   BarChart3,
   Hourglass
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Legend } from "recharts";
 
 // === UI helpers ===
 const StatusBadge = ({ status }) => {
@@ -54,6 +60,28 @@ const StatusBadge = ({ status }) => {
     </Badge>
   );
 };
+
+function getAccumulatedValue(obj, metaId, currentPeriod, currentValue) {
+  if (!obj || !Array.isArray(obj.hitos)) return currentValue || 0;
+
+  const periodOrder = ["Q1", "Q2", "Q3", "FINAL"];
+  const currentIdx = periodOrder.indexOf(currentPeriod);
+  if (currentIdx === -1) return currentValue || 0;
+
+  let total = 0;
+  for (const h of obj.hitos) {
+    const hIdx = periodOrder.indexOf(h.periodo);
+    if (hIdx !== -1 && hIdx <= currentIdx) {
+      const m = h.metas?.find(m => (m.metaId === metaId || m._id === metaId));
+      if (h.periodo === currentPeriod) {
+        total += Number(currentValue || 0);
+      } else if (m) {
+        total += Number(m.resultado || 0);
+      }
+    }
+  }
+  return total;
+}
 
 // === Objective Card Component (Refined) ===
 const ObjectiveCard = ({ obj, currentPeriod, expanded, onToggle }) => {
@@ -98,7 +126,7 @@ const ObjectiveCard = ({ obj, currentPeriod, expanded, onToggle }) => {
               </div>
               {expanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
             </div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Progreso</div>
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Resultado</div>
           </div>
         </div>
 
@@ -150,27 +178,36 @@ const ObjectiveCard = ({ obj, currentPeriod, expanded, onToggle }) => {
               {/* Metas / KPI */}
               {/* Metas / KPI */}
               <div className="space-y-3">
-                {currentHito?.metas?.map((meta, idx) => (
-                  <div key={idx} className="pb-3 border-b border-slate-50 last:border-0 last:pb-0">
-                    <div className="text-sm text-slate-700 font-medium mb-1">{meta.nombre || "Meta sin descripción"}</div>
-                    <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
-                      <span className="bg-slate-100 px-2 py-1 rounded">
-                        Esperado: {meta.esperado !== null ? meta.esperado : "N/A"} {meta.unidad}
-                      </span>
-                      {obj.metas?.[idx]?.modoAcumulacion === "acumulativo" && (
-                        <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">Acumulativo</span>
-                      )}
-                      {obj.metas?.[idx]?.reglaCierre && (
-                        <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded border border-indigo-100">
-                          Cierre: {obj.metas?.[idx]?.reglaCierre}
+                {currentHito?.metas?.map((meta, idx) => {
+                  const isAcumulativo = obj.metas?.[idx]?.modoAcumulacion === "acumulativo";
+                  const valorEvaluado = isAcumulativo
+                    ? getAccumulatedValue(obj, meta.metaId || meta._id, selectedPeriod, meta.resultado)
+                    : meta.resultado;
+
+                  return (
+                    <div key={idx} className="pb-3 border-b border-slate-50 last:border-0 last:pb-0">
+                      <div className="text-sm text-slate-700 font-medium mb-1">{meta.nombre || "Meta sin descripción"}</div>
+                      <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                        <span className="bg-slate-100 px-2 py-1 rounded">
+                          Esperado: {meta.esperado !== null ? meta.esperado : "N/A"} {meta.unidad}
                         </span>
-                      )}
-                      {obj.metas?.[idx]?.reconoceEsfuerzo && (
-                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">Reconoce Esfuerzo</span>
-                      )}
+                        {isAcumulativo && (
+                          <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">
+                            Acumulado: {valorEvaluado}
+                          </span>
+                        )}
+                        {obj.metas?.[idx]?.reglaCierre && (
+                          <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded border border-indigo-100">
+                            Cierre: {obj.metas?.[idx]?.reglaCierre}
+                          </span>
+                        )}
+                        {obj.metas?.[idx]?.reconoceEsfuerzo && (
+                          <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">Reconoce Esfuerzo</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {(!currentHito?.metas || currentHito.metas.length === 0) && (
                   <div className="text-sm text-slate-400 italic">Sin metas definidas para este hito.</div>
                 )}
@@ -220,6 +257,11 @@ export default function MiDesempeno() {
   // Estado local para comentarios/ack antes de guardar
   const [localComment, setLocalComment] = useState("");
   const [localAck, setLocalAck] = useState(null);
+
+  // New State for Redesign
+  const [activeTab, setActiveTab] = useState("obj"); // "obj" | "comp"
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [viewPeriod, setViewPeriod] = useState(null); // For chart interaction
 
 
 
@@ -300,62 +342,160 @@ export default function MiDesempeno() {
     }
   }, [selectedFeedback]);
 
-  // Calcular resultados para el periodo seleccionado
+
+
+  // Calcular resultados para el periodo seleccionado (USANDO LOGICA MANAGER)
   const periodResults = useMemo(() => {
     if (!data || !selectedFeedback) return { objetivos: [], aptitudes: [], scores: { obj: 0, comp: 0, global: 0 } };
     const p = selectedFeedback.periodo;
 
-    let totalObjScore = 0;
-    let totalObjWeight = 0;
-    let totalCompScore = 0;
-    let totalCompWeight = 0;
+    // Helper to convert period to a comparable month index (1-12) based on Fiscal Year (Sep-Aug)
+    const getPeriodMonth = (periodStr) => {
+      if (!periodStr) return 0;
+      if (periodStr === "Q1") return 3;   // Sep-Nov
+      if (periodStr === "Q2") return 6;   // Dec-Feb
+      if (periodStr === "Q3") return 9;   // Mar-May
+      if (periodStr === "FINAL") return 12; // Jun-Aug
 
-    const mapItems = (items, type) => {
-      return items.map(it => {
-        const hito = it.hitos?.find(h => h.periodo === p);
-        const score = hito?.actual ?? 0;
+      let suffix = periodStr;
+      if (periodStr.length > 4 && !isNaN(periodStr.slice(0, 4))) {
+        suffix = periodStr.slice(4);
+      }
 
-        if (type === 'obj') {
-          totalObjScore += Number(score) * (it.peso || 0);
-          totalObjWeight += (it.peso || 0);
-        } else {
-          totalCompScore += Number(score) * (it.peso || 0);
-          totalCompWeight += (it.peso || 0);
-        }
-
-        return {
-          ...it,
-          hitoActual: hito,
-          scorePeriodo: score
-        };
-      });
+      if (suffix.startsWith("M")) {
+        const m = parseInt(suffix.slice(1));
+        return m >= 9 ? m - 8 : m + 4;
+      }
+      if (suffix.startsWith("Q")) {
+        const q = parseInt(suffix.slice(1));
+        return q * 3;
+      }
+      if (suffix.startsWith("S")) {
+        const s = parseInt(suffix.slice(1));
+        return s * 6;
+      }
+      if (suffix === "FINAL" || suffix.endsWith("FINAL")) return 12;
+      return 12;
     };
 
-    const objetivos = mapItems(data.objetivos || [], 'obj');
-    const aptitudes = mapItems(data.aptitudes || [], 'comp');
+    const feedbackLimit = getPeriodMonth(p);
+    const previousLimit = feedbackLimit - 3;
 
-    const scoreObj = totalObjWeight > 0 ? (totalObjScore / totalObjWeight) : 0;
-    const scoreComp = totalCompWeight > 0 ? (totalCompScore / totalCompWeight) : 0;
+    // Objetivos
+    let totalObjScore = 0;
+    let totalObjWeight = 0;
+    const objetivos = [];
 
-    // Asumimos 80/20 si no hay config global
-    const wObj = 80;
-    const wComp = 20;
-    const global = ((scoreObj * wObj) + (scoreComp * wComp)) / (wObj + wComp);
+    data.objetivos?.forEach(obj => {
+      const relevantHitos = obj.hitos?.filter(h => getPeriodMonth(h.periodo) <= feedbackLimit) || [];
+      let score = 0;
+      let hitoActual = null;
+
+      // Find hito specifically for this feedback period to display in the card
+      const hitoPeriodo = obj.hitos?.find(h => {
+        if (!h.periodo) return false;
+        if (h.periodo === p) return true;
+        if (h.periodo.endsWith(p)) return true;
+        if (p === "FINAL" && (h.periodo.endsWith("Q4") || h.periodo.endsWith("A1"))) return true;
+        return false;
+      });
+
+      if (relevantHitos.length > 0) {
+        const isCumulative = obj.metas?.some(m => m.acumulativa || m.modoAcumulacion === 'acumulativo');
+        const progresos = relevantHitos.map(h => h.actual ?? 0);
+        score = isCumulative
+          ? Math.max(...progresos, 0)
+          : Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length);
+      }
+
+      const hasPermiteOver = obj.metas?.some(m => m.permiteOver) || obj.hitos?.some(h => h.metas?.some(m => m.permiteOver));
+      const effectiveScore = hasPermiteOver ? score : Math.min(score, 100);
+
+      totalObjScore += effectiveScore * (obj.peso || 0);
+      totalObjWeight += (obj.peso || 0); // Should sum to 100 ideally
+
+      objetivos.push({
+        ...obj,
+        hitoActual: hitoPeriodo, // For display in card
+        scorePeriodo: effectiveScore // Calculated score up to this period
+      });
+    });
+
+    const scoreObjRaw = totalObjScore / 100; // Normalize to 100 base
+    const scoreObj = scoreObjRaw * 0.7; // Weighted contribution (Max 70)
+
+    // Competencias
+    let totalCompScore = 0;
+    let compCount = 0;
+    const aptitudes = [];
+
+    data.aptitudes?.forEach(apt => {
+      const relevantHitos = apt.hitos?.filter(h => getPeriodMonth(h.periodo) <= feedbackLimit) || [];
+      let score = 0;
+      const puntuaciones = relevantHitos.map(h => h.actual).filter(val => val !== null && val !== undefined);
+
+      if (puntuaciones.length > 0) {
+        score = Math.round(puntuaciones.reduce((a, b) => a + b, 0) / puntuaciones.length);
+      }
+
+      totalCompScore += score;
+      compCount++;
+
+      const hitoPeriodo = apt.hitos?.find(h => h.periodo === p);
+
+      aptitudes.push({
+        ...apt,
+        hitoActual: hitoPeriodo,
+        scorePeriodo: score
+      });
+    });
+
+    const scoreCompRaw = compCount > 0 ? (totalCompScore / compCount) : 0;
+    const scoreComp = scoreCompRaw * 0.3; // Weighted contribution (Max 30)
+
+    const global = scoreObj + scoreComp;
+
+    // Adjust for display (0-100 scale for individual sections)
+    // User wants WEIGHTED scores to match Manager View (e.g. 58% + 24% = 82%)
+    const displayObj = scoreObj;
+    const displayComp = scoreComp;
+    const displayGlobal = global;
 
     return {
       objetivos,
       aptitudes,
       scores: {
-        obj: scoreObj,
-        comp: scoreComp,
-        global
+        obj: displayObj,
+        comp: displayComp,
+        global: displayGlobal
       }
     };
   }, [data, selectedFeedback]);
 
+  // Auto-select first item when results change
+  useEffect(() => {
+    if (periodResults) {
+      if (activeTab === "obj" && periodResults.objetivos.length > 0) {
+        if (!selectedItemId || !periodResults.objetivos.find(o => o._id === selectedItemId)) {
+          setSelectedItemId(periodResults.objetivos[0]._id);
+        }
+      } else if (activeTab === "comp" && periodResults.aptitudes.length > 0) {
+        if (!selectedItemId || !periodResults.aptitudes.find(a => a._id === selectedItemId)) {
+          setSelectedItemId(periodResults.aptitudes[0]._id);
+        }
+      }
+    }
+  }, [periodResults, activeTab]);
+
+  // Reset viewPeriod when item changes
+  useEffect(() => {
+    setViewPeriod(null);
+  }, [selectedItemId, activeTab, selectedFeedback]);
+
   // Guardar respuesta (Ack/Comment)
   const handleSaveResponse = async () => {
     if (!selectedFeedback) return;
+    if (!window.confirm("¿Seguro desea enviar su devolución? Una vez enviada no podrá modificarla.")) return;
     try {
       const payload = {
         empleado: empleadoId,
@@ -370,7 +510,7 @@ export default function MiDesempeno() {
         }
       };
 
-      await api("/feedback", {
+      await api("/feedbacks", {
         method: "POST",
         body: payload
       });
@@ -396,28 +536,321 @@ export default function MiDesempeno() {
     }
   };
 
+  const renderDetailView = () => {
+    const item = activeTab === 'obj'
+      ? periodResults.objetivos.find(o => o._id === selectedItemId)
+      : periodResults.aptitudes.find(a => a._id === selectedItemId);
+
+    if (!item) return (
+      <div className="h-full flex flex-col items-center justify-center text-slate-400">
+        <Target className="w-12 h-12 mb-4 opacity-20" />
+        <p>Seleccioná un ítem para ver el detalle.</p>
+      </div>
+    );
+
+    // Determine Display Period and Active Months for Highlighting
+    const isMonthly = item.frecuencia?.toLowerCase().includes("mensual");
+    let displayPeriod = viewPeriod;
+    let activeMonths = [];
+
+    // Map Quarters to Months (Fiscal Year: Sep-Aug)
+    const periodMonthsMap = {
+      "Q1": ["M09", "M10", "M11"],
+      "Q2": ["M12", "M01", "M02"],
+      "Q3": ["M03", "M04", "M05"],
+      "FINAL": ["M06", "M07", "M08"]
+    };
+
+    if (!displayPeriod) {
+      if (isMonthly && selectedFeedback.periodo.startsWith("Q")) {
+        // Handle "2025Q1" -> "Q1"
+        const suffix = selectedFeedback.periodo.length > 4 ? selectedFeedback.periodo.slice(4) : selectedFeedback.periodo;
+
+        // Default display period is the last month of the quarter (for the Detail View)
+        const qMapEnd = { "Q1": "M11", "Q2": "M02", "Q3": "M05", "FINAL": "M08" };
+        displayPeriod = qMapEnd[suffix] || "M11";
+
+        // Highlight ALL months in the quarter
+        activeMonths = periodMonthsMap[suffix] || [];
+      } else {
+        displayPeriod = selectedFeedback.periodo;
+        activeMonths = [selectedFeedback.periodo];
+      }
+    } else {
+      // If user clicked a specific month/period
+      activeMonths = [displayPeriod];
+    }
+
+    // Find the Hito for the Display Period (for the Detail Card below)
+    const displayHito = item.hitos?.find(h => {
+      if (!h.periodo) return false;
+      if (h.periodo === displayPeriod) return true;
+      if (h.periodo.endsWith(displayPeriod)) return true;
+      if (displayPeriod === "FINAL" && (h.periodo.endsWith("Q4") || h.periodo.endsWith("A1"))) return true;
+      return false;
+    });
+
+    // Prepare Graph Data
+    const periods = isMonthly
+      ? ["M09", "M10", "M11", "M12", "M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
+      : ["Q1", "Q2", "Q3", "FINAL"];
+
+    const maxScore = activeTab === 'obj' ? (item.peso || 100) : 100;
+
+    const graphData = periods.map(p => {
+      // Find hito for this period
+      const h = item.hitos?.find(h => {
+        if (!h.periodo) return false;
+        if (h.periodo === p) return true;
+        if (h.periodo.endsWith(p)) return true;
+        if (p === "FINAL" && (h.periodo.endsWith("Q4") || h.periodo.endsWith("A1"))) return true;
+        return false;
+      });
+
+      // Determine if this is the currently viewed period (or part of the active range)
+      const isSelected = activeMonths.some(m => p === m || p.endsWith(m));
+
+      // Calculate Weighted Score for Objectives, Raw Score for Competencies
+      const rawScore = h?.actual ?? 0;
+      const weightedScore = activeTab === 'obj'
+        ? (rawScore * maxScore) / 100
+        : rawScore;
+
+      return {
+        name: p,
+        score: weightedScore,
+        rawScore: rawScore, // Keep raw for tooltip if needed
+        meta: maxScore,
+        isCurrent: isSelected
+      };
+    });
+
+    const metaLabel = activeTab === 'obj' ? `Meta: ${maxScore}%` : `Meta: ${maxScore}%`;
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-300">
+        {/* Header */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Badge className={activeTab === 'obj' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}>
+              {activeTab === 'obj' ? 'Objetivo' : 'Competencia'}
+            </Badge>
+            {activeTab === 'obj' && <span className="text-xs text-slate-500 font-medium">Peso: {item.peso}%</span>}
+            <Badge variant="outline" className="text-[10px] text-slate-500">
+              {item.frecuencia || "Anual"}
+            </Badge>
+          </div>
+          <h2 className="text-xl font-bold text-slate-800">{item.nombre}</h2>
+          {item.descripcion && <p className="text-slate-500 text-sm mt-2">{item.descripcion}</p>}
+        </div>
+
+        {/* Evolution Graph */}
+        <div className="h-72 w-full bg-slate-50 rounded-xl border border-slate-100 p-4">
+          <h4 className="text-xs font-bold text-slate-400 uppercase mb-4">Evolución Anual vs Meta</h4>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={graphData}
+              margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
+              onClick={(data) => {
+                if (data && data.activeLabel) {
+                  setViewPeriod(data.activeLabel);
+                }
+              }}
+            >
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <YAxis hide domain={[0, maxScore]} />
+              <Tooltip
+                cursor={{ fill: 'transparent' }}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                formatter={(value, name, props) => [
+                  `${Math.round(value)}%`, // Show weighted score
+                  name === 'score' ? 'Resultado Ponderado' : metaLabel
+                ]}
+                labelFormatter={(label) => `Periodo: ${label}`}
+              />
+              <ReferenceLine
+                y={maxScore}
+                stroke="#10b981"
+                strokeDasharray="3 3"
+                label={{
+                  position: 'right',
+                  value: metaLabel,
+                  fill: '#10b981',
+                  fontSize: 10
+                }}
+              />
+              <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={50} style={{ cursor: 'pointer' }}>
+                {graphData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.isCurrent ? (activeTab === 'obj' ? '#2563eb' : '#d97706') : '#cbd5e1'}
+                    className="transition-all duration-300 hover:opacity-80"
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Current Period Detail */}
+        <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h4 className="font-bold text-slate-700 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              Detalle {displayPeriod}
+            </h4>
+            <div className="text-2xl font-black text-slate-800">
+              {displayHito?.actual ?? "—"}%
+            </div>
+          </div>
+
+          {/* Metas (Only for Objectives) */}
+          {activeTab === 'obj' && (
+            <div className="space-y-6 mb-6">
+              {displayHito?.metas?.map((meta, idx) => {
+                // Find definition in item.metas to get full config
+                const metaDef = item.metas?.find(m => m._id === (meta.metaId || meta._id)) || item.metas?.[idx];
+
+                const isAcumulativo = metaDef?.modoAcumulacion === "acumulativo";
+                const valorEvaluado = isAcumulativo
+                  ? getAccumulatedValue(item, metaDef?._id, displayPeriod, meta.resultado)
+                  : meta.resultado;
+
+                return (
+                  <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    {/* Header */}
+                    <div className="bg-slate-50/50 p-3 border-b border-slate-100 flex justify-between items-center">
+                      <div className="font-bold text-slate-700 text-sm">{metaDef?.nombre || meta.nombre}</div>
+                      <Badge variant="outline" className="bg-white text-slate-500 border-slate-200 text-[10px]">
+                        Peso: {metaDef?.peso ?? 0}%
+                      </Badge>
+                    </div>
+
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                      {/* Config */}
+                      <div className="space-y-2">
+                        <div className="font-bold text-slate-400 uppercase text-[10px]">Configuración</div>
+                        <div className="grid grid-cols-2 gap-y-1 text-slate-600">
+                          <span>Unidad:</span> <span className="font-medium">{metaDef?.unidad || meta.unidad}</span>
+                          <span>Seguimiento:</span> <span className="font-medium capitalize">{metaDef?.modoAcumulacion?.replace('_', ' ') || "Por Período"}</span>
+                          <span>Cierre:</span> <span className="font-medium capitalize">{metaDef?.reglaCierre?.replace('_', ' ') || "Promedio"}</span>
+                        </div>
+                      </div>
+
+                      {/* Objetivo */}
+                      <div className="space-y-2">
+                        <div className="font-bold text-slate-400 uppercase text-[10px]">Objetivo</div>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col items-center justify-center text-center h-full">
+                          <div className="text-lg font-bold text-slate-700">
+                            {metaDef?.operador || ""} {meta.esperado}
+                          </div>
+                          <div className="text-[10px] text-slate-400">Valor Esperado</div>
+                        </div>
+                      </div>
+
+                      {/* Resultado */}
+                      <div className="space-y-2">
+                        <div className="font-bold text-slate-400 uppercase text-[10px]">Resultado</div>
+                        <div className={`p-2 rounded border flex flex-col items-center justify-center text-center h-full ${valorEvaluado >= meta.esperado ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-100 text-amber-700'}`}>
+                          <div className="text-lg font-bold">
+                            {valorEvaluado ?? "—"}
+                          </div>
+                          <div className="text-[10px] opacity-70">Obtenido</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Options Badges */}
+                    <div className="px-4 pb-3 flex gap-2">
+                      {metaDef?.reconoceEsfuerzo && (
+                        <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-600 hover:bg-blue-100">Reconoce Esfuerzo</Badge>
+                      )}
+                      {metaDef?.permiteOverAchievement && (
+                        <Badge variant="secondary" className="text-[10px] bg-purple-50 text-purple-600 hover:bg-purple-100">Over-achievement</Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Comments */}
+          <div className="bg-white p-4 rounded-lg border border-slate-200">
+            <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Comentario del Evaluador</label>
+            <p className="text-sm text-slate-600 italic">
+              {displayHito?.comentario || "Sin comentarios."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (!user) return <div className="p-6 text-center">Iniciá sesión.</div>;
 
   const currentYear = new Date().getFullYear();
   const timelineItems = [
-    { id: "Q1", label: "Noviembre", sub: "Inicio", date: `${currentYear - 1}-11-01` },
-    { id: "Q2", label: "Febrero", sub: "Seguimiento", date: `${currentYear}-02-01` },
-    { id: "Q3", label: "Mayo", sub: "Seguimiento", date: `${currentYear}-05-01` },
-    { id: "FINAL", label: "Agosto", sub: "Cierre Anual", date: `${currentYear}-08-30` }
+    {
+      id: "Q1",
+      label: "Noviembre",
+      sub: "Inicio",
+      date: `${currentYear - 1}-11-01`,
+      actionMonth: "Diciembre",
+      deadlines: { manager: "1-10", employee: "10-20", hr: "20-30" }
+    },
+    {
+      id: "Q2",
+      label: "Febrero",
+      sub: "Seguimiento",
+      date: `${currentYear}-02-01`,
+      actionMonth: "Marzo",
+      deadlines: { manager: "1-10", employee: "10-20", hr: "20-30" }
+    },
+    {
+      id: "Q3",
+      label: "Mayo",
+      sub: "Seguimiento",
+      date: `${currentYear}-05-01`,
+      actionMonth: "Junio",
+      deadlines: { manager: "1-10", employee: "10-20", hr: "20-30" }
+    },
+    {
+      id: "FINAL",
+      label: "Agosto",
+      sub: "Cierre Anual",
+      date: `${currentYear}-08-30`,
+      actionMonth: "Septiembre",
+      deadlines: { manager: "1-10", employee: "10-20", hr: "20-30" }
+    }
   ];
 
-  const evaluatorName = selectedFeedback?.creadoPor?.nombre
-    ? `${selectedFeedback.creadoPor.nombre} ${selectedFeedback.creadoPor.apellido}`
-    : "Evaluador no asignado";
+  const evaluatorName = (() => {
+    const creator = selectedFeedback?.creadoPor;
+    if (!creator) return "Evaluador no asignado";
+
+    // 1. Try linked employee (most accurate)
+    if (creator.empleado?.nombre) {
+      return `${creator.empleado.nombre} ${creator.empleado.apellido || ""}`.trim();
+    }
+    // 2. Try user name
+    if (creator.nombre) {
+      return `${creator.nombre} ${creator.apellido || ""}`.trim();
+    }
+    // 3. Try email
+    if (creator.email) return creator.email;
+
+    return "Evaluador no asignado";
+  })();
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-12">
+    <div className="min-h-screen bg-slate-50 pb-12">
       {/* Header Negro */}
       <div className="bg-slate-900 text-white pt-12 pb-24 px-4 md:px-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-3xl opacity-20 translate-x-1/2 -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-600 rounded-full blur-3xl opacity-20 -translate-x-1/2 translate-y-1/2"></div>
 
-        <div className="max-w-[90%] mx-auto relative z-10">
+        <div className="max-w-[80%] mx-auto relative z-10">
           <div className="flex justify-between items-end mb-6">
             <div>
               <h1 className="text-3xl font-bold tracking-tight mb-2">Hola, {empleadoNombre}</h1>
@@ -431,7 +864,7 @@ export default function MiDesempeno() {
         </div>
       </div>
 
-      <div className="max-w-[90%] mx-auto px-4 md:px-8 -mt-16 relative z-20">
+      <div className="max-w-[80%] mx-auto px-4 md:px-8 -mt-16 relative z-20">
         <div className="grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-8">
 
           {/* SIDEBAR NAVIGATION (Sticky) */}
@@ -463,6 +896,10 @@ export default function MiDesempeno() {
 
           {/* MAIN CONTENT (Scrollable) */}
           <div className="space-y-12">
+
+            {/* SECTION 0: FEEDBACK FLOW */}
+
+
 
             {/* SECTION 1: FEEDBACK RESULTS (Timeline + Summary) */}
             <div ref={sectionFeedbackRef} className="scroll-mt-32">
@@ -500,6 +937,20 @@ export default function MiDesempeno() {
                         <div className={`mt-4 text-center transition-all ${isSelected ? 'transform translate-y-1' : ''}`}>
                           <div className={`text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{p.label}</div>
                           <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{p.sub}</div>
+                          <div className="mt-1 px-2 py-0.5 bg-slate-50 rounded text-[9px] text-slate-500 border border-slate-100 whitespace-nowrap group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                            Rev: {p.actionMonth}
+                          </div>
+
+                          {/* Hover Tooltip for Deadlines */}
+                          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-white text-xs rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                            <div className="font-bold mb-1 border-b border-slate-600 pb-1">Plazos {p.actionMonth}</div>
+                            <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1 text-[10px]">
+                              <span className="text-slate-300">Jefe:</span> <span>{p.deadlines.manager}</span>
+                              <span className="text-slate-300">Empleado:</span> <span>{p.deadlines.employee}</span>
+                              <span className="text-slate-300">RRHH:</span> <span>{p.deadlines.hr}</span>
+                            </div>
+                            <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                          </div>
                         </div>
                       </button>
                     );
@@ -580,78 +1031,85 @@ export default function MiDesempeno() {
               )}
             </div>
 
-            {/* SECTION 2: DETAILED VIEW (Objectives & Competencies) */}
+            {/* SECTION 2: DETAILED VIEW (Redesigned) */}
             <div ref={sectionDetailsRef} className="scroll-mt-32">
               {!selectedFeedback || selectedFeedback.isPlaceholder ? (
                 <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-dashed">
                   No hay detalles disponibles para este periodo.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Objetivos */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Target className="w-5 h-5 text-blue-600" />
-                      <h3 className="font-bold text-slate-800 text-lg">Objetivos</h3>
+                <div className="flex flex-col lg:flex-row gap-6 h-[800px]">
+                  {/* LEFT COLUMN: LIST */}
+                  <div className="w-full lg:w-1/3 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    {/* TABS */}
+                    <div className="flex border-b border-slate-100">
+                      <button
+                        onClick={() => setActiveTab('obj')}
+                        className={`flex-1 py-4 text-sm font-bold transition-colors ${activeTab === 'obj' ? 'text-blue-600 bg-blue-50/50 border-b-2 border-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}
+                      >
+                        Objetivos
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('comp')}
+                        className={`flex-1 py-4 text-sm font-bold transition-colors ${activeTab === 'comp' ? 'text-amber-600 bg-amber-50/50 border-b-2 border-amber-600' : 'text-slate-500 hover:bg-slate-50'}`}
+                      >
+                        Competencias
+                      </button>
                     </div>
-                    {periodResults.objetivos.map(obj => (
-                      <ObjectiveCard
-                        key={obj._id}
-                        obj={obj}
-                        currentPeriod={selectedFeedback.periodo}
-                        expanded={expandedItems[obj._id]}
-                        onToggle={() => toggleExpand(obj._id)}
-                      />
-                    ))}
-                    {periodResults.objetivos.length === 0 && <div className="p-6 text-center text-slate-400 italic bg-white rounded-xl border border-dashed">No hay objetivos asignados.</div>}
+
+                    {/* LIST ITEMS */}
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/30">
+                      {activeTab === 'obj' ? (
+                        periodResults.objetivos.length > 0 ? (
+                          periodResults.objetivos.map(obj => (
+                            <button
+                              key={obj._id}
+                              onClick={() => setSelectedItemId(obj._id)}
+                              className={`w-full text-left p-4 rounded-xl border transition-all ${selectedItemId === obj._id ? 'bg-white border-blue-200 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-100 hover:border-blue-100 hover:shadow-sm'}`}
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[10px]">
+                                  {obj.peso}% Peso
+                                </Badge>
+                                <span className={`text-sm font-bold ${obj.scorePeriodo > 0 ? 'text-blue-600' : 'text-slate-300'}`}>
+                                  {Math.round((obj.scorePeriodo * obj.peso) / 100)}%
+                                </span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-800 line-clamp-2">{obj.nombre}</div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-8 text-center text-slate-400 text-sm italic">No hay objetivos.</div>
+                        )
+                      ) : (
+                        periodResults.aptitudes.length > 0 ? (
+                          periodResults.aptitudes.map(apt => (
+                            <button
+                              key={apt._id}
+                              onClick={() => setSelectedItemId(apt._id)}
+                              className={`w-full text-left p-4 rounded-xl border transition-all ${selectedItemId === apt._id ? 'bg-white border-amber-200 shadow-md ring-1 ring-amber-100' : 'bg-white border-slate-100 hover:border-amber-100 hover:shadow-sm'}`}
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[10px]">
+                                  Competencia
+                                </Badge>
+                                <span className={`text-sm font-bold ${apt.scorePeriodo > 0 ? 'text-amber-600' : 'text-slate-300'}`}>
+                                  {Math.round(apt.scorePeriodo)}%
+                                </span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-800 line-clamp-2">{apt.nombre}</div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-8 text-center text-slate-400 text-sm italic">No hay competencias.</div>
+                        )
+                      )}
+                    </div>
                   </div>
 
-                  {/* Competencias */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Lightbulb className="w-5 h-5 text-amber-500" />
-                      <h3 className="font-bold text-slate-800 text-lg">Competencias</h3>
-                    </div>
-                    {periodResults.aptitudes.map(apt => (
-                      <div key={apt._id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
-                        <button
-                          onClick={() => toggleExpand(apt._id)}
-                          className="w-full p-5 flex items-center justify-between text-left"
-                        >
-                          <div className="flex-1 pr-4">
-                            <div className="font-bold text-slate-800">{apt.nombre}</div>
-                            <div className="mt-3 w-full max-w-xs h-2 rounded-full bg-slate-100 overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-amber-400 to-orange-400" style={{ width: `${Math.max(0, Math.min(100, Math.round(apt.scorePeriodo)))}%` }}></div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <span className="text-sm font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">{Math.round(apt.scorePeriodo)}%</span>
-                            {expandedItems[apt._id] ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-                          </div>
-                        </button>
-
-                        {expandedItems[apt._id] && (
-                          <div className="p-5 bg-slate-50/50 border-t border-slate-100 text-sm space-y-3 animate-in slide-in-from-top-2">
-                            <div className="grid grid-cols-1 gap-4">
-                              <div className="bg-white p-3 rounded border border-slate-200">
-                                <div className="text-xs font-bold text-slate-400 uppercase mb-1">Descripción</div>
-                                <div className="text-slate-700">{apt.descripcion || "Sin descripción"}</div>
-                              </div>
-                              <div className="bg-white p-3 rounded border border-slate-200">
-                                <div className="text-xs font-bold text-slate-400 uppercase mb-1">Resultado Obtenido</div>
-                                <div className="text-slate-700 font-medium">{apt.hitoActual?.actual ?? "—"}</div>
-                                {apt.hitoActual?.comentario && (
-                                  <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500 italic">
-                                    "{apt.hitoActual.comentario}"
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {periodResults.aptitudes.length === 0 && <div className="p-6 text-center text-slate-400 italic bg-white rounded-xl border border-dashed">No hay competencias asignadas.</div>}
+                  {/* RIGHT COLUMN: DETAILS */}
+                  <div className="w-full lg:w-2/3 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 overflow-y-auto">
+                    {renderDetailView()}
                   </div>
                 </div>
               )}
@@ -670,15 +1128,15 @@ export default function MiDesempeno() {
                     Conformidad y Validación
                   </h3>
 
-                  <div className="space-y-6">
+                  <div className="space-y-6 mb-8 pb-8 border-b border-slate-100">
                     <div>
                       <label className="text-sm font-medium text-slate-700 mb-2 block">Comentarios para RRHH</label>
                       <textarea
-                        className="w-full h-32 rounded-xl border border-slate-200 p-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                        className="w-full h-32 rounded-xl border border-slate-200 p-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none bg-slate-50 focus:bg-white"
                         placeholder="Escribí tus comentarios sobre este feedback..."
                         value={localComment}
                         onChange={(e) => setLocalComment(e.target.value)}
-                        disabled={selectedFeedback.estado === "CLOSED"}
+                        disabled={selectedFeedback.estado === "CLOSED" || selectedFeedback.estado === "PENDING_HR" || !!selectedFeedback.empleadoAck?.estado}
                       />
                     </div>
 
@@ -686,7 +1144,7 @@ export default function MiDesempeno() {
                       <div className="flex gap-3 w-full sm:w-auto">
                         <button
                           onClick={() => setLocalAck("ACK")}
-                          disabled={selectedFeedback.estado === "CLOSED"}
+                          disabled={selectedFeedback.estado === "CLOSED" || selectedFeedback.estado === "PENDING_HR" || !!selectedFeedback.empleadoAck?.estado}
                           className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${localAck === "ACK"
                             ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500 ring-offset-2"
                             : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
@@ -699,7 +1157,7 @@ export default function MiDesempeno() {
                         </button>
                         <button
                           onClick={() => setLocalAck("CONTEST")}
-                          disabled={selectedFeedback.estado === "CLOSED"}
+                          disabled={selectedFeedback.estado === "CLOSED" || selectedFeedback.estado === "PENDING_HR" || !!selectedFeedback.empleadoAck?.estado}
                           className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${localAck === "CONTEST"
                             ? "bg-rose-100 text-rose-700 ring-2 ring-rose-500 ring-offset-2"
                             : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
@@ -714,10 +1172,10 @@ export default function MiDesempeno() {
 
                       <Button
                         onClick={handleSaveResponse}
-                        disabled={selectedFeedback.estado === "CLOSED" || !localAck}
-                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 px-8"
+                        disabled={selectedFeedback.estado === "CLOSED" || selectedFeedback.estado === "PENDING_HR" || !!selectedFeedback.empleadoAck?.estado || !localAck}
+                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 px-8 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {selectedFeedback.estado === "CLOSED" ? "Cerrado" : "Enviar a RRHH"}
+                        {selectedFeedback.estado === "CLOSED" || selectedFeedback.estado === "PENDING_HR" || !!selectedFeedback.empleadoAck?.estado ? "Enviado" : "Enviar a RRHH"}
                       </Button>
                     </div>
 
@@ -728,13 +1186,62 @@ export default function MiDesempeno() {
                       </div>
                     )}
                   </div>
+
+                  {/* FEEDBACK FLOW MOVED HERE */}
+                  <div className="pt-8">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-6 flex items-center gap-2">
+                      <span className="w-3 h-3 bg-slate-400 rounded-full" /> Estado del Proceso
+                    </h4>
+                    <div className="relative px-4 md:px-12">
+                      <div className="absolute left-0 right-0 top-4 h-0.5 bg-slate-100 -z-0 mx-8 md:mx-16"></div>
+                      <div className="flex justify-between relative z-10">
+                        {[
+                          { label: "Borrador", status: "DRAFT", date: selectedFeedback.createdAt, icon: FileEdit, deadlineKey: "manager" },
+                          { label: "Enviado a Vos", status: "SENT", date: selectedFeedback.submittedToEmployeeAt, icon: Send, deadlineKey: "employee" },
+                          { label: "Tu Respuesta", status: "PENDING_HR", date: selectedFeedback.empleadoAck?.fecha, icon: Users, deadlineKey: "hr" },
+                          { label: "Finalizado", status: "CLOSED", date: selectedFeedback.closedAt, icon: CheckCircle, deadlineKey: null }
+                        ].map((step, idx) => {
+                          const order = { "DRAFT": 0, "SENT": 1, "PENDING_HR": 2, "CLOSED": 3 };
+                          const currentStep = order[selectedFeedback.estado] ?? 0;
+                          const isCompleted = idx <= currentStep;
+                          const Icon = step.icon;
+
+                          // Get deadline info
+                          const periodItem = timelineItems.find(t => t.id === selectedFeedback.periodo);
+                          const deadlineRange = step.deadlineKey && periodItem ? periodItem.deadlines[step.deadlineKey] : null;
+                          const actionMonth = periodItem?.actionMonth;
+
+                          return (
+                            <div key={idx} className="flex flex-col items-center text-center gap-2">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 ${isCompleted ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-300'}`}>
+                                <Icon className="w-4 h-4" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className={`text-xs font-bold ${isCompleted ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
+                                {step.date && isCompleted && (
+                                  <span className="text-[10px] text-slate-500 font-medium">
+                                    {new Date(step.date).toLocaleDateString()}
+                                  </span>
+                                )}
+                                {!isCompleted && deadlineRange && (
+                                  <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-1.5 py-0.5 rounded mt-1 border border-amber-100">
+                                    {deadlineRange} {actionMonth?.slice(0, 3)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
           </div>
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

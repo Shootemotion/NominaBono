@@ -32,6 +32,9 @@ const FeedbackSchema = new mongoose.Schema(
         // Comentarios del empleado
         comentarioEmpleado: { type: String, default: "" },
 
+        // Comentario de RRHH (al cerrar)
+        comentarioRRHH: { type: String, default: "" },
+
         // Aprobación del empleado
         empleadoAck: {
             estado: { type: String, enum: ["ACK", "CONTEST", null], default: null },
