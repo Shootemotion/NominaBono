@@ -154,7 +154,7 @@ export default function Home() {
       desc: "Nómina, estructura y organigrama.",
       icon: Users,
       to: "/gestion-estructura",
-      allow: canViewEstructura,
+      allow: canViewEstructura && (hasRoleRRHH || hasRoleDirectivo || user?.isJefeArea || user?.isJefeSector),
       gradient: "from-cyan-600 to-blue-600",
       textColor: "text-cyan-50",
     },

@@ -430,13 +430,15 @@ export default function LegajoEmpleado() {
           <aside className="lg:col-span-1 space-y-4">
             {/* Chips resumen */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-border/60 bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Sueldo vigente</div>
-                <div className="text-base font-semibold">{sueldoVigenteTxt}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  Desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0, 10) : "—"}
+              {isRRHH && (
+                <div className="rounded-lg border border-border/60 bg-card p-3">
+                  <div className="text-[11px] text-muted-foreground">Sueldo vigente</div>
+                  <div className="text-base font-semibold">{sueldoVigenteTxt}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0, 10) : "—"}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="rounded-lg border border-border/60 bg-card p-3">
                 <div className="text-[11px] text-muted-foreground">Último puesto</div>
                 <div className="text-base font-semibold">{ultimoPuesto}</div>
@@ -468,14 +470,16 @@ export default function LegajoEmpleado() {
             </div>
 
             {/* Tips / accesos */}
-            <div className="rounded-xl bg-card ring-1 ring-border/60 p-4">
-              <div className="text-sm font-semibold mb-2">Accesos rápidos</div>
-              <ul className="text-sm list-disc pl-5 space-y-1 text-muted-foreground">
-                <li>Cambiar estado laboral desde el header</li>
-                <li>Editar datos desde “Información básica”</li>
-                <li>Actualizar sueldo en “Datos laborales”</li>
-              </ul>
-            </div>
+            {isRRHH && (
+              <div className="rounded-xl bg-card ring-1 ring-border/60 p-4">
+                <div className="text-sm font-semibold mb-2">Accesos rápidos</div>
+                <ul className="text-sm list-disc pl-5 space-y-1 text-muted-foreground">
+                  <li>Cambiar estado laboral desde el header</li>
+                  <li>Editar datos desde “Información básica”</li>
+                  <li>Actualizar sueldo en “Datos laborales”</li>
+                </ul>
+              </div>
+            )}
           </aside>
 
           {/* PANEL CENTRAL: Tabs siempre arriba + contenido */}
