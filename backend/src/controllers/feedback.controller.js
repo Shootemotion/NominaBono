@@ -102,7 +102,7 @@ export const saveFeedback = async (req, res) => {
 export const getPendingFeedbacks = async (req, res) => {
     try {
         const { periodo, year } = req.query;
-        const query = { estado: "PENDING_HR" };
+        const query = { estado: { $in: ["PENDING_HR", "CLOSED"] } };
 
         if (periodo) query.periodo = periodo;
         if (year) query.year = Number(year);
