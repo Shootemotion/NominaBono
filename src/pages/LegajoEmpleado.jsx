@@ -104,6 +104,8 @@ export default function LegajoEmpleado() {
   const [loading, setLoading] = useState(true);
 
   const isRRHH = !!(user?.isSuper || user?.isRRHH || user?.caps?.includes?.("nomina:editar"));
+  const isOwnProfile = user?.empleadoId === id || user?.empleado?._id === id;
+  const canEditBasic = isRRHH || isOwnProfile;
 
   // Catálogos para pick lists
   const [areas, setAreas] = useState([]);
@@ -333,6 +335,22 @@ export default function LegajoEmpleado() {
     }
   };
 
+  const onSubirFoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const fd = new FormData();
+      fd.append("foto", file);
+      const resp = await api(`/empleados/${id}/foto`, { method: "POST", body: fd });
+      const upd = resp?.empleado || resp;
+      setEmp(upd);
+      toast.success("Foto actualizada.");
+    } catch (err) {
+      console.error(err);
+      toast.error("No se pudo subir la foto.");
+    }
+  };
+
   if (loading) return <div className="p-6">Cargando…</div>;
   if (!emp) return <div className="p-6 text-sm text-muted-foreground">Empleado no encontrado.</div>;
 
@@ -350,7 +368,7 @@ export default function LegajoEmpleado() {
         {/* Header */}
         <div className="rounded-xl bg-card/95 backdrop-blur ring-1 ring-border/60 p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="h-12 w-12 rounded-full ring-1 ring-border/60 overflow-hidden bg-muted/40">
+            <div className="h-12 w-12 rounded-full ring-1 ring-border/60 overflow-hidden bg-muted/40 relative group">
               {avatar ? (
                 <img src={avatar} alt="foto" className="h-full w-full object-cover" />
               ) : (
@@ -361,6 +379,12 @@ export default function LegajoEmpleado() {
                   alt="iniciales"
                   className="h-full w-full object-cover"
                 />
+              )}
+              {canEditBasic && (
+                <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                  <input type="file" accept="image/*" className="hidden" onChange={onSubirFoto} />
+                  <span className="text-white text-[10px]">Editar</span>
+                </label>
               )}
             </div>
             <div>
@@ -481,12 +505,14 @@ export default function LegajoEmpleado() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold">Información básica</h3>
                   {!editBasic ? (
-                    <button
-                      onClick={() => setEditBasic(true)}
-                      className="text-xs rounded-md px-3 py-1.5 bg-slate-900 text-white hover:bg-slate-800"
-                    >
-                      Editar
-                    </button>
+                    canEditBasic && (
+                      <button
+                        onClick={() => setEditBasic(true)}
+                        className="text-xs rounded-md px-3 py-1.5 bg-slate-900 text-white hover:bg-slate-800"
+                      >
+                        Editar
+                      </button>
+                    )
                   ) : (
                     <div className="flex gap-2">
                       <button
@@ -538,11 +564,11 @@ export default function LegajoEmpleado() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <FieldInput label="Nombre" value={basicForm.nombre} onChange={(v) => setBasicForm(s => ({ ...s, nombre: v }))} />
-                    <FieldInput label="Apellido" value={basicForm.apellido} onChange={(v) => setBasicForm(s => ({ ...s, apellido: v }))} />
+                    <FieldInput label="Nombre" value={basicForm.nombre} onChange={(v) => setBasicForm(s => ({ ...s, nombre: v }))} disabled={!isRRHH} />
+                    <FieldInput label="Apellido" value={basicForm.apellido} onChange={(v) => setBasicForm(s => ({ ...s, apellido: v }))} disabled={!isRRHH} />
                     <FieldInput label="Email" type="email" value={basicForm.email} onChange={(v) => setBasicForm(s => ({ ...s, email: v }))} />
                     <FieldInput label="Celular" value={basicForm.celular} onChange={(v) => setBasicForm(s => ({ ...s, celular: v }))} />
-                    <FieldInput label="Domicilio" value={basicForm.domicilio} onChange={(v) => setBasicForm(s => ({ ...s, domicilio: v }))} />
+                    <FieldInput label="Domicilio" value={basicForm.domicilio} onChange={(v) => setBasicForm(s => ({ ...s, domicilio: v }))} disabled={!isRRHH} />
 
                     <div>
                       <Label>Puesto</Label>
@@ -550,6 +576,7 @@ export default function LegajoEmpleado() {
                         className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
                         value={basicForm.puesto}
                         onChange={(e) => setBasicForm(s => ({ ...s, puesto: e.target.value }))}
+                        disabled={!isRRHH}
                       >
                         <option value="">{puestos.length ? "Seleccionar puesto" : "Sin opciones"}</option>
                         {puestos.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -561,6 +588,7 @@ export default function LegajoEmpleado() {
                         className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
                         value={basicForm.categoria}
                         onChange={(e) => setBasicForm(s => ({ ...s, categoria: e.target.value }))}
+                        disabled={!isRRHH}
                       >
                         <option value="">Seleccionar categoría</option>
                         {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -576,6 +604,7 @@ export default function LegajoEmpleado() {
                           const areaId = e.target.value;
                           setBasicForm(s => ({ ...s, area: areaId, sector: "" }));
                         }}
+                        disabled={!isRRHH}
                       >
                         <option value="">{areas.length ? "Seleccione un área" : "No hay áreas"}</option>
                         {areas.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
@@ -587,7 +616,7 @@ export default function LegajoEmpleado() {
                         className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
                         value={basicForm.sector}
                         onChange={(e) => setBasicForm(s => ({ ...s, sector: e.target.value }))}
-                        disabled={!basicForm.area || sectoresFiltrados.length === 0}
+                        disabled={!isRRHH || !basicForm.area || sectoresFiltrados.length === 0}
                       >
                         <option value="">
                           {!basicForm.area ? "Elegí un área primero" : (sectoresFiltrados.length ? "Seleccione un sector" : "Sin sectores")}
@@ -596,9 +625,9 @@ export default function LegajoEmpleado() {
                       </select>
                     </div>
 
-                    <FieldInput label="Fecha de ingreso" type="date" value={basicForm.fechaIngreso} onChange={(v) => setBasicForm(s => ({ ...s, fechaIngreso: v }))} />
-                    <FieldInput label="DNI" value={basicForm.dni} onChange={(v) => setBasicForm(s => ({ ...s, dni: v }))} />
-                    <FieldInput label="CUIL" value={basicForm.cuil} onChange={(v) => setBasicForm(s => ({ ...s, cuil: v }))} />
+                    <FieldInput label="Fecha de ingreso" type="date" value={basicForm.fechaIngreso} onChange={(v) => setBasicForm(s => ({ ...s, fechaIngreso: v }))} disabled={!isRRHH} />
+                    <FieldInput label="DNI" value={basicForm.dni} onChange={(v) => setBasicForm(s => ({ ...s, dni: v }))} disabled={!isRRHH} />
+                    <FieldInput label="CUIL" value={basicForm.cuil} onChange={(v) => setBasicForm(s => ({ ...s, cuil: v }))} disabled={!isRRHH} />
                   </div>
                 )}
               </div>

@@ -62,7 +62,7 @@ function App() {
           <Route
             path="/nomina/legajo/:id"
             element={
-              <RequireAuth allow={['superadmin', 'directivo', 'rrhh']} allowReferente={true}>
+              <RequireAuth allowReferente={true}>
                 <LegajoEmpleado />
               </RequireAuth>
             }
