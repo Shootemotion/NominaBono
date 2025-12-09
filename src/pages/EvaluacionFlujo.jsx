@@ -522,7 +522,7 @@ export default function EvaluacionFlujo() {
 
   const handleSaveFeedback = async (periodo, comentario, estado) => {
     try {
-      await api("/feedbacks", {
+      const saved = await api("/feedbacks", {
         method: "POST",
         body: {
           empleado: selectedEmpleadoId,

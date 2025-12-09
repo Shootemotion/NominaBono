@@ -9,7 +9,14 @@ export const getFeedbacksByEmpleado = async (req, res) => {
         if (year) query.year = Number(year);
 
         const feedbacks = await Feedback.find(query)
-            .populate("creadoPor", "nombre apellido")
+            .populate({
+                path: "creadoPor",
+                select: "nombre email empleado",
+                populate: {
+                    path: "empleado",
+                    select: "nombre apellido fotoUrl"
+                }
+            })
             .sort({ periodo: 1 });
         res.json(feedbacks);
     } catch (error) {
@@ -34,7 +41,7 @@ export const saveFeedback = async (req, res) => {
         let existing = await Feedback.findOne({ empleado, year, periodo });
         let correctionCount = existing?.correctionCount || 0;
 
-        const isEmployee = req.user?._id && String(req.user._id) === String(empleado);
+        const isEmployee = req.user?.empleadoId && String(req.user.empleadoId) === String(empleado);
 
         const data = {
             empleado,
@@ -47,12 +54,18 @@ export const saveFeedback = async (req, res) => {
             empleadoAck,
         };
 
-        if (!isEmployee) {
-            // Manager logic
-            data.creadoPor = req.user?._id;
+        // Determine if this is a "Manager Action" (creating/updating feedback content)
+
+        // This allows capturing the creator even if the user is evaluating themselves (isEmployee === true)
+        // This allows capturing the creator even if the user is evaluating themselves (isEmployee === true)
+        // We set creadoPor if it's not set yet, or if it's a manager acting on someone else.
+        if (!isEmployee || (!existing?.creadoPor && (estado === "SENT" || estado === "DRAFT"))) {
+            if (!existing?.creadoPor || !isEmployee) {
+                data.creadoPor = req.user?._id;
+            }
 
             // Logic for correction limit (Manager sending feedback)
-            if (existing && ["SENT", "ACKNOWLEDGED", "CLOSED"].includes(existing.estado)) {
+            if (!isEmployee && existing && ["SENT", "ACKNOWLEDGED", "CLOSED"].includes(existing.estado)) {
                 // If trying to update an already sent feedback
                 if (correctionCount >= 1) {
                     return res.status(400).json({ message: "Solo se permite una corrección después de enviar el feedback." });
@@ -71,9 +84,11 @@ export const saveFeedback = async (req, res) => {
             data.closedAt = new Date();
         }
 
+
+
         const updated = await Feedback.findOneAndUpdate(
             { empleado, year, periodo },
-            data,
+            { $set: data },
             { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
@@ -81,5 +96,58 @@ export const saveFeedback = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Error al guardar feedback" });
+    }
+};
+
+export const getPendingFeedbacks = async (req, res) => {
+    try {
+        const { periodo, year } = req.query;
+        const query = { estado: "PENDING_HR" };
+
+        if (periodo) query.periodo = periodo;
+        if (year) query.year = Number(year);
+
+        const feedbacks = await Feedback.find(query)
+            .populate("empleado", "nombre apellido area sector")
+            .populate({
+                path: "creadoPor",
+                select: "nombre email empleado",
+                populate: { path: "empleado", select: "nombre apellido" }
+            })
+            .sort({ "empleado.apellido": 1 });
+
+        res.json(feedbacks);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Error al obtener feedbacks pendientes" });
+    }
+};
+
+export const closeFeedbacksBulk = async (req, res) => {
+    try {
+        const { ids, comentarioRRHH } = req.body;
+
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ message: "Se requieren IDs para cerrar" });
+        }
+
+        const updateData = {
+            estado: "CLOSED",
+            closedAt: new Date()
+        };
+
+        if (comentarioRRHH) {
+            updateData.comentarioRRHH = comentarioRRHH;
+        }
+
+        const result = await Feedback.updateMany(
+            { _id: { $in: ids } },
+            { $set: updateData }
+        );
+
+        res.json({ message: "Feedbacks cerrados correctamente", modifiedCount: result.modifiedCount });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Error al cerrar feedbacks" });
     }
 };
