@@ -41,7 +41,7 @@ function assertObjectId(req, res, next) {
 // ---- middleware: precargar empleado por :id ----
 async function preloadEmpleado(req, res, next) {
   try {
-    const emp = await Empleado.findById(req.params.id);
+    const emp = await Empleado.findById(req.params.id).populate("area", "nombre").populate("sector", "nombre");
     if (!emp) return res.status(404).json({ message: 'Empleado no encontrado' });
     req.empleado = emp;
     next();

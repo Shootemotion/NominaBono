@@ -6,6 +6,22 @@ import logo from '@/assets/DiagnosLogo.png';
 import { Button } from '@/components/ui/button';
 import useCan, { useHasRole } from '@/hooks/useCan';
 import { API_ORIGIN, api } from "@/lib/api";
+import {
+  LayoutDashboard,
+  Users,
+  Building2,
+  Target,
+  CheckCircle,
+  UserPlus,
+  DollarSign,
+  BarChart3,
+  UserCircle,
+  LogOut,
+  Camera,
+  Menu,
+  X,
+  ChevronDown
+} from 'lucide-react';
 
 function Navbar({ showDisabledInsteadOfHiding = false }) {
   const { user, logout, setUser } = useAuth();
@@ -26,6 +42,7 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
   const fileRef = useRef(null);
   const [subiendo, setSubiendo] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handlePick = () => {
     if (!user?.empleado?._id) return;
@@ -78,7 +95,6 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
   // Permisos / roles
   const { ok: canViewEstructura } = useCan('estructura:ver');
   const { ok: canViewNomina } = useCan('nomina:ver');
-  const { ok: canManageUsuarios } = useCan('usuarios:manage');
   const { ok: hasRoleRRHH } = useHasRole(['rrhh', 'jefe_area', 'jefe_sector']);
   const { ok: hasRoleDirectivo } = useHasRole(['directivo']);
 
@@ -107,178 +123,238 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
   // 🚩 Caso especial: VISOR puro (no referente)
   const isNormalUser = user?.rol === 'visor' && !hasReferente;
 
+  // 🔒 Superadmin check for Users page
+  const isSuperAdmin = user?.isSuper === true || user?.rol === 'superadmin';
+
   function handleLogout() {
     logout();
     nav('/login', { replace: true });
   }
 
   const linkClass = ({ isActive }) =>
-    `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? 'text-foreground bg-muted' : 'text-white/90 hover:text-white hover:bg-white/10'
+    `flex flex-col items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all duration-200 min-w-[70px] ${isActive
+      ? 'text-blue-600 bg-blue-50 shadow-sm ring-1 ring-blue-100'
+      : 'text-slate-600 hover:text-blue-600 hover:bg-slate-50'
     }`;
 
-  const renderNavItem = (to, label, allowed) => {
-    if (allowed) return <NavLink to={to} className={linkClass}>{label}</NavLink>;
+  const renderNavItem = (to, label, icon, allowed) => {
+    if (allowed) return (
+      <NavLink to={to} className={linkClass}>
+        {icon && <span className="w-5 h-5">{icon}</span>}
+        <span className="leading-none text-center">{label}</span>
+      </NavLink>
+    );
     if (!showDisabledInsteadOfHiding) return null;
     return (
-      <span className="px-3 py-2 rounded-md text-sm text-white/40 cursor-not-allowed" title="No tiene permisos">
-        {label}
+      <span className="flex flex-col items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[10px] text-slate-300 cursor-not-allowed min-w-[70px]" title="No tiene permisos">
+        {icon && <span className="w-5 h-5">{icon}</span>}
+        <span className="leading-none text-center">{label}</span>
       </span>
     );
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-700 bg-[var(--color-1)] text-white">
-      <nav className="flex items-center h-16 justify-between">
-        {/* Logo */}
-        <div className="flex items-center h-full">
-          <Link to="/" className="h-full flex items-center px-6 bg-white hover:bg-gray-200 transition-colors">
-            <img src={logo} alt="Diagnos" className="h-9 w-auto filter invert(1)" />
-          </Link>
-        </div>
+    <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
+      <nav className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14">
 
-        {/* LINKS */}
-        <div className="flex-1 flex justify-center items-center">
-          <div className="flex items-center gap-3">
+          {/* Logo */}
+          <div className="flex-shrink-0 flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-2 group">
+              <div className="bg-blue-600 rounded-lg p-1 group-hover:bg-blue-700 transition-colors">
+                <img src={logo} alt="Diagnos" className="h-5 w-auto filter brightness-0 invert" />
+              </div>
+              <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-blue-500 hidden md:block">
+                Diagnos
+              </span>
+            </Link>
+          </div>
+
+          {/* Desktop Navigation */}
+          <div className="hidden xl:flex flex-1 justify-center items-center px-4">
+            <div className="flex items-center gap-1">
+              {isNormalUser ? (
+                <>
+                  {/* 🚩 VISOR puro → solo Seguimiento y Mi desempeño */}
+                  {renderNavItem('/seguimiento', 'Seguimiento', <LayoutDashboard />, true)}
+                  {user && renderNavItem('/mi-desempeno', 'Mi Desempeño', <Target />, true)}
+                  {user?.empleado?._id && renderNavItem(`/nomina/legajo/${user.empleado._id}`, 'Mi Legajo', <UserCircle />, true)}
+                </>
+              ) : (
+                <>
+                  {/* Nómina */}
+                  {renderNavItem('/gestion-estructura', 'Nómina', <Users />, canViewEstructura)}
+
+                  {/* Departamentos */}
+                  {renderNavItem('/gestion-departamentos', 'Departamentos', <Building2 />, canViewEstructuraFinal)}
+
+                  {/* Seguimiento Ejecutivo */}
+                  {renderNavItem('/seguimiento-ejecutivo', 'Tablero', <BarChart3 />, true)}
+
+                  {/* Objetivos (solo RRHH o Directivos) */}
+                  {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/plantillas', 'Objetivos', <Target />, true)}
+                  {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/rrhh-evaluaciones', 'Cierre', <CheckCircle />, true)}
+
+                  {/* Asignaciones (solo RRHH o Directivos) */}
+                  {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/asignaciones', 'Asignaciones', <UserPlus />, true)}
+
+                  {/* Bonos (solo RRHH o Directivos) */}
+                  {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/configuracion-bono', 'Config. Bonos', <DollarSign />, true)}
+                  {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/resultados-bono', 'Resultados', <BarChart3 />, true)}
+
+                  {/* Seguimiento (RRHH/Directivos/Nómina/Referentes) */}
+                  {(hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente) &&
+                    renderNavItem('/seguimiento', 'Seguimiento', <LayoutDashboard />, true)}
+
+                  {/* Mi desempeño (todos logueados) */}
+                  {user && renderNavItem('/mi-desempeno', 'Mi Desempeño', <Target />, true)}
+                  {user?.empleado?._id && renderNavItem(`/nomina/legajo/${user.empleado._id}`, 'Mi Legajo', <UserCircle />, true)}
+
+                  {/* Usuarios (solo SUPERADMIN) */}
+                  {isSuperAdmin && renderNavItem('/usuarios', 'Usuarios', <Users />, true)}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* User Menu & Mobile Toggle */}
+          <div className="flex items-center gap-4">
+            {user ? (
+              <>
+                {/* User Dropdown */}
+                <div className="relative ml-3">
+                  <button
+                    type="button"
+                    className="flex items-center gap-3 max-w-xs rounded-full focus:outline-none group"
+                    onClick={() => setMenuAbierto((v) => !v)}
+                  >
+                    <div className="flex flex-col items-end hidden md:flex">
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-blue-600 transition-colors">
+                        {user?.fullName || (user?.apellido ? `${user.nombre} ${user.apellido}` : user?.email)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wide">
+                        {user?.empleado?.puesto || user?.rol || "Usuario"}
+                      </span>
+                    </div>
+                    <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-slate-100 group-hover:ring-blue-100 transition-all">
+                      {avatarSrc ? (
+                        <img
+                          src={avatarSrc}
+                          alt=""
+                          className={`h-full w-full object-cover ${subiendo ? 'opacity-60' : ''}`}
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold">
+                          {(user?.fullName || user?.email || "?")[0].toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <ChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${menuAbierto ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {menuAbierto && (
+                    <div
+                      className="absolute right-0 mt-2 w-60 rounded-xl bg-white shadow-lg ring-1 ring-black/5 py-1 z-50 transform opacity-100 scale-100 transition-all duration-200 origin-top-right"
+                      onMouseLeave={() => setMenuAbierto(false)}
+                    >
+                      <div className="px-4 py-3 border-b border-slate-50 md:hidden">
+                        <p className="text-sm font-medium text-slate-900 truncate">
+                          {user?.fullName || user?.email}
+                        </p>
+                        <p className="text-xs text-slate-500 truncate">
+                          {user?.empleado?.puesto || user?.rol}
+                        </p>
+                      </div>
+
+                      <div className="py-1">
+                        <button
+                          className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                          onClick={handlePick}
+                          disabled={subiendo || !user?.empleado?._id}
+                        >
+                          <Camera size={16} className="text-slate-400" />
+                          {subiendo ? 'Subiendo...' : 'Cambiar foto'}
+                        </button>
+
+                        <button
+                          className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                          onClick={() => {
+                            nav('/mi-desempeno');
+                            setMenuAbierto(false);
+                          }}
+                        >
+                          <Target size={16} className="text-slate-400" />
+                          Mi Desempeño
+                        </button>
+                      </div>
+
+                      <div className="border-t border-slate-50 my-1" />
+
+                      <button
+                        className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                        onClick={handleLogout}
+                      >
+                        <LogOut size={16} />
+                        Cerrar Sesión
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Input file hidden */}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onFileChange}
+                />
+              </>
+            ) : (
+              <Button onClick={() => nav('/login')} variant="ghost" className="text-slate-600 hover:text-blue-600">
+                Ingresar
+              </Button>
+            )}
+
+            {/* Mobile menu button */}
+            <div className="flex xl:hidden">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                <span className="sr-only">Abrir menú</span>
+                {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="xl:hidden bg-white border-t border-slate-200">
+          <div className="px-2 pt-2 pb-3 space-y-1">
+            {/* Mobile links here - simplified for brevity, ideally reuse renderNavItem logic adapted for mobile */}
             {isNormalUser ? (
               <>
-                {/* 🚩 VISOR puro → solo Seguimiento y Mi desempeño */}
-                {renderNavItem('/seguimiento', 'Seguimiento', true)}
-                {user && renderNavItem('/mi-desempeno', 'Mi desempeño', true)}
+                <NavLink to="/seguimiento" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Seguimiento</NavLink>
+                <NavLink to="/mi-desempeno" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Mi Desempeño</NavLink>
               </>
             ) : (
               <>
-                {/* Nómina */}
-                {renderNavItem('/gestion-estructura', 'Nomina', canViewEstructura)}
-
-                {/* Departamentos */}
-                {renderNavItem('/gestion-departamentos', 'Departamentos', canViewEstructuraFinal)}
-
-                {/* Seguimiento Ejecutivo */}
-                {renderNavItem('/seguimiento-ejecutivo', 'Seguimiento Ejecutivo', true)}
-
-                {/* Objetivos (solo RRHH o Directivos) */}
-                {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/plantillas', 'Objetivos', true)}
-                {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/rrhh-evaluaciones', 'Cierre RRHH', true)}
-                {/* Asignaciones (solo RRHH o Directivos) */}
-                {(hasRoleRRHH || hasRoleDirectivo) && renderNavItem('/asignaciones', 'Asignaciones', true)}
-
-
-
-                {/* Seguimiento (RRHH/Directivos/Nómina/Referentes) */}
-                {(hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente) &&
-                  renderNavItem('/seguimiento', 'Seguimiento', true)}
-
-                {/* Mi desempeño (todos logueados) */}
-                {user && renderNavItem('/mi-desempeno', 'Mi desempeño', true)}
-
-                {/* Usuarios (solo admins de usuarios) */}
-                {canManageUsuarios && renderNavItem('/usuarios', 'Usuarios', true)}
+                <NavLink to="/gestion-estructura" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Nómina</NavLink>
+                <NavLink to="/gestion-departamentos" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Departamentos</NavLink>
+                <NavLink to="/seguimiento-ejecutivo" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Tablero</NavLink>
+                {(hasRoleRRHH || hasRoleDirectivo) && <NavLink to="/plantillas" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Objetivos</NavLink>}
+                {(hasRoleRRHH || hasRoleDirectivo) && <NavLink to="/resultados-bono" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Bonos</NavLink>}
+                {isSuperAdmin && <NavLink to="/usuarios" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Usuarios</NavLink>}
               </>
             )}
           </div>
         </div>
-
-        {/* Usuario */}
-        <div className="flex items-center gap-3 px-6 relative">
-          {user ? (
-            <>
-              {/* Avatar con menú */}
-              <div className="relative">
-                <button
-                  type="button"
-                  className="group h-12 w-12 rounded-full overflow-hidden border-2 border-white/30 shadow-md focus:outline-none focus:ring-2 focus:ring-white/40"
-                  onClick={() => setMenuAbierto((v) => !v)}
-                  title="Abrir menú de usuario"
-                >
-                  {avatarSrc ? (
-                    <img
-                      src={avatarSrc}
-                      alt={user?.fullName || user?.email || 'Usuario'}
-                      className={`h-full w-full object-cover transition-opacity ${subiendo ? 'opacity-60' : 'opacity-100'}`}
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-white/20 flex items-center justify-center text-sm font-medium">
-                      {(user?.fullName || user?.email || "?")[0]}
-                    </div>
-                  )}
-                </button>
-
-                {/* Menú flotante */}
-                {menuAbierto && (
-                  <div
-                    className="absolute right-0 mt-2 w-56 rounded-md bg-white text-gray-900 shadow-lg ring-1 ring-black/10 overflow-hidden z-50"
-                    onMouseLeave={() => setMenuAbierto(false)}
-                  >
-                    <div className="px-4 py-3 border-b">
-                      <div className="text-sm font-medium truncate">
-                        {user?.fullName || (user?.apellido ? `${user.apellido}, ${user.nombre}` : user?.email)}
-                      </div>
-                      <div className="text-xs text-gray-500 truncate">{user?.empleado?.puesto || "—"}</div>
-                    </div>
-
-                    <button
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 disabled:opacity-60"
-                      onClick={handlePick}
-                      disabled={subiendo || !user?.empleado?._id}
-                    >
-                      {subiendo ? 'Subiendo foto…' : 'Cambiar foto'}
-                    </button>
-
-                    <div className="border-t" />
-
-                    <button
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                      onClick={() => nav('/mi-desempeno')}
-                    >
-                      Mi desempeño
-                    </button>
-
-                    <button
-                      className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50"
-                      onClick={handleLogout}
-                    >
-                      Salir
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Input file oculto */}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={onFileChange}
-              />
-
-              {/* Info usuario */}
-              <div className="hidden sm:flex flex-col text-right">
-                <span className="text-sm font-medium opacity-90">
-                  {user?.fullName || (user?.apellido ? `${user.apellido}, ${user.nombre}` : user?.email)}
-                </span>
-                <span className="text-xs text-gray-200">
-                  {user?.empleado?.puesto || "—"}
-                </span>
-                <span className="text-xs text-gray-400">
-                  {user?.rol}
-                </span>
-              </div>
-
-              {/* Logout */}
-              <Button
-                variant="outline"
-                className="bg-white/10 hover:bg白/20 text-white border-white/20"
-                onClick={handleLogout}
-              >
-                Salir
-              </Button>
-            </>
-          ) : (
-            <Link to="/login" className="text-sm underline">Ingresar</Link>
-          )}
-        </div>
-      </nav>
+      )}
     </header>
   );
 }

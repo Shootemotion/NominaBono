@@ -43,7 +43,7 @@ export const getEmpleados = async (req, res, next) => {
 
     const [items, total] = await Promise.all([
       Empleado.find(filter)
-        .select("nombre apellido email dni cuil puesto categoria area sector sueldoBase fotoUrl createdAt updatedAt")
+        .select("nombre apellido email dni cuil puesto categoria area sector sueldoBase fotoUrl createdAt updatedAt celular apodo fechaIngreso domicilio")
         .populate("area", "nombre")
         .populate("sector", "nombre")
         .sort(sortObj)

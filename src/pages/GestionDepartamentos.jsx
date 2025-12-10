@@ -17,7 +17,7 @@ async function fetchAll(path, { pageSize = 200, params = {} } = {}) {
   const baseQS = new URLSearchParams(existing || "");
   Object.entries(params).forEach(([k, v]) => baseQS.set(k, String(v)));
 
-  for (;;) {
+  for (; ;) {
     const qs = new URLSearchParams(baseQS);
     qs.set("page", String(page));
     qs.set("pageSize", String(pageSize));
@@ -25,18 +25,18 @@ async function fetchAll(path, { pageSize = 200, params = {} } = {}) {
 
     const data = await api(url);
     const chunk =
-      Array.isArray(data)        ? data :
-      Array.isArray(data?.docs)  ? data.docs :
-      Array.isArray(data?.items) ? data.items :
-      Array.isArray(data?.data)  ? data.data :
-      Array.isArray(data?.rows)  ? data.rows :
-      [];
+      Array.isArray(data) ? data :
+        Array.isArray(data?.docs) ? data.docs :
+          Array.isArray(data?.items) ? data.items :
+            Array.isArray(data?.data) ? data.data :
+              Array.isArray(data?.rows) ? data.rows :
+                [];
 
     out.push(...chunk);
 
     const total = Number(data?.total ?? data?.count ?? 0);
-    const ps    = Number(data?.pageSize ?? data?.limit ?? pageSize);
-    const cur   = Number(data?.page ?? page);
+    const ps = Number(data?.pageSize ?? data?.limit ?? pageSize);
+    const cur = Number(data?.page ?? page);
 
     if (total && cur * ps < total) {
       page += 1;
@@ -73,7 +73,7 @@ export default function GestionDepartamentos() {
     rolLower === "director" ||
     rolLower === "directivo";
 
-  const canEditStructure = user?.isSuper || user?.isRRHH; // crear / eliminar áreas y sectores
+  const canEditStructure = user?.isSuper || user?.isRRHH || isDirectivo; // crear / eliminar áreas y sectores
   const canEditReferentes = canEditStructure || isDirectivo; // agregar / quitar referentes
 
   useEffect(() => {
@@ -89,15 +89,15 @@ export default function GestionDepartamentos() {
 
         const norm = (res) =>
           Array.isArray(res) ? res :
-          Array.isArray(res?.data) ? res.data :
-          Array.isArray(res?.items) ? res.items :
-          Array.isArray(res?.results) ? res.results :
-          Array.isArray(res?.rows) ? res.rows :
-          Array.isArray(res?.docs) ? res.docs :
-          [];
+            Array.isArray(res?.data) ? res.data :
+              Array.isArray(res?.items) ? res.items :
+                Array.isArray(res?.results) ? res.results :
+                  Array.isArray(res?.rows) ? res.rows :
+                    Array.isArray(res?.docs) ? res.docs :
+                      [];
 
-        const areasN     = norm(a);
-        const sectoresN  = norm(s);
+        const areasN = norm(a);
+        const sectoresN = norm(s);
         const empleadosN = Array.isArray(e) ? e : [];
 
         setAreas(areasN);
@@ -105,7 +105,7 @@ export default function GestionDepartamentos() {
         // normalizo _id a string para que ReferentesModal / AreaEditModal funcionen 1:1
         setEmpleados(empleadosN.map((x) => ({ ...x, _id: String(x._id ?? x.id) })));
 
-        console.log("🟦 areas",    { len: areasN.length, sample: areasN[0] });
+        console.log("🟦 areas", { len: areasN.length, sample: areasN[0] });
         console.log("🟩 sectores", { len: sectoresN.length, sample: sectoresN[0] });
         console.log("🟨 empleados", { len: empleadosN.length, sample: empleadosN[0] });
       } catch (err) {
@@ -301,9 +301,8 @@ export default function GestionDepartamentos() {
                     <div className="flex items-start gap-3 p-3">
                       {/* Franja izquierda */}
                       <div
-                        className={`h-10 w-1.5 rounded-full ${
-                          conectado ? "bg-primary/60" : "bg-primary/20"
-                        } mt-1 transition-colors`}
+                        className={`h-10 w-1.5 rounded-full ${conectado ? "bg-primary/60" : "bg-primary/20"
+                          } mt-1 transition-colors`}
                       />
 
                       {/* Datos */}
@@ -411,18 +410,16 @@ export default function GestionDepartamentos() {
                 return (
                   <li
                     key={sId}
-                    className={`group rounded-lg ring-1 ring-border/60 transition-all hover:shadow-sm relative ${
-                      conectadoHover
+                    className={`group rounded-lg ring-1 ring-border/60 transition-all hover:shadow-sm relative ${conectadoHover
                         ? "bg-primary/5 border-l-2 border-primary/50"
                         : "bg-background/70 hover:bg-background"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-3 p-3">
                       {/* Franja/estado de conexión */}
                       <div
-                        className={`h-10 w-1.5 rounded-full ${
-                          conectadoHover ? "bg-primary/60" : "bg-primary/20"
-                        } mt-1 transition-colors`}
+                        className={`h-10 w-1.5 rounded-full ${conectadoHover ? "bg-primary/60" : "bg-primary/20"
+                          } mt-1 transition-colors`}
                       />
 
                       {/* Datos */}

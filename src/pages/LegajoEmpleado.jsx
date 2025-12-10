@@ -393,31 +393,33 @@ export default function LegajoEmpleado() {
               </h1>
               <div className="text-xs text-muted-foreground">{emp.puesto || "—"}</div>
               <div className="mt-1">
-                <EstadoTag estado={emp?.estadoLaboral || "ACTIVO"} />
+                {isRRHH && <EstadoTag estado={emp?.estadoLaboral || "ACTIVO"} />}
               </div>
             </div>
           </div>
 
           {/* Estado laboral en cabecera */}
           <div className="flex items-center gap-2">
-            <select
-              disabled={!isRRHH}
-              className="rounded-md border border-input bg-background px-2 py-2 text-sm"
-              value={estadoLaboral}
-              onChange={(e) => setEstadoLaboral(e.target.value)}
-              title="Estado laboral"
-            >
-              <option value="ACTIVO">ACTIVO</option>
-              <option value="SUSPENDIDO">SUSPENDIDO</option>
-              <option value="DESVINCULADO">DESVINCULADO</option>
-            </select>
-            <button
-              disabled={!isRRHH}
-              onClick={onGuardarEstado}
-              className="rounded-md px-3 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              Guardar estado
-            </button>
+            {isRRHH && (
+              <>
+                <select
+                  className="rounded-md border border-input bg-background px-2 py-2 text-sm"
+                  value={estadoLaboral}
+                  onChange={(e) => setEstadoLaboral(e.target.value)}
+                  title="Estado laboral"
+                >
+                  <option value="ACTIVO">ACTIVO</option>
+                  <option value="SUSPENDIDO">SUSPENDIDO</option>
+                  <option value="DESVINCULADO">DESVINCULADO</option>
+                </select>
+                <button
+                  onClick={onGuardarEstado}
+                  className="rounded-md px-3 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Guardar estado
+                </button>
+              </>
+            )}
             <button onClick={onBack} className="text-sm px-3 py-2 rounded-md bg-muted hover:bg-muted/70">
               Volver
             </button>
@@ -447,10 +449,12 @@ export default function LegajoEmpleado() {
                 <div className="text-[11px] text-muted-foreground">Capacitaciones</div>
                 <div className="text-base font-semibold">{capsTotales}</div>
               </div>
-              <div className="rounded-lg border border-border/60 bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Vencen 30 días</div>
-                <div className="text-base font-semibold">{capsVencen}</div>
-              </div>
+              {isRRHH && (
+                <div className="rounded-lg border border-border/60 bg-card p-3">
+                  <div className="text-[11px] text-muted-foreground">Vencen 30 días</div>
+                  <div className="text-base font-semibold">{capsVencen}</div>
+                </div>
+              )}
             </div>
 
             {/* Snapshot */}
@@ -571,7 +575,11 @@ export default function LegajoEmpleado() {
                     <FieldInput label="Nombre" value={basicForm.nombre} onChange={(v) => setBasicForm(s => ({ ...s, nombre: v }))} disabled={!isRRHH} />
                     <FieldInput label="Apellido" value={basicForm.apellido} onChange={(v) => setBasicForm(s => ({ ...s, apellido: v }))} disabled={!isRRHH} />
                     <FieldInput label="Email" type="email" value={basicForm.email} onChange={(v) => setBasicForm(s => ({ ...s, email: v }))} />
-                    <FieldInput label="Celular" value={basicForm.celular} onChange={(v) => setBasicForm(s => ({ ...s, celular: v }))} />
+                    <FieldInput
+                      label="Celular"
+                      value={basicForm.celular}
+                      onChange={(v) => setBasicForm(s => ({ ...s, celular: v.replace(/[^0-9+-\s]/g, "") }))}
+                    />
                     <FieldInput label="Domicilio" value={basicForm.domicilio} onChange={(v) => setBasicForm(s => ({ ...s, domicilio: v }))} disabled={!isRRHH} />
 
                     <div>
@@ -630,8 +638,18 @@ export default function LegajoEmpleado() {
                     </div>
 
                     <FieldInput label="Fecha de ingreso" type="date" value={basicForm.fechaIngreso} onChange={(v) => setBasicForm(s => ({ ...s, fechaIngreso: v }))} disabled={!isRRHH} />
-                    <FieldInput label="DNI" value={basicForm.dni} onChange={(v) => setBasicForm(s => ({ ...s, dni: v }))} disabled={!isRRHH} />
-                    <FieldInput label="CUIL" value={basicForm.cuil} onChange={(v) => setBasicForm(s => ({ ...s, cuil: v }))} disabled={!isRRHH} />
+                    <FieldInput
+                      label="DNI"
+                      value={basicForm.dni}
+                      onChange={(v) => setBasicForm(s => ({ ...s, dni: v.replace(/[^0-9]/g, "") }))}
+                      disabled={!isRRHH}
+                    />
+                    <FieldInput
+                      label="CUIL"
+                      value={basicForm.cuil}
+                      onChange={(v) => setBasicForm(s => ({ ...s, cuil: v.replace(/[^0-9-]/g, "") }))}
+                      disabled={!isRRHH}
+                    />
                   </div>
                 )}
               </div>
