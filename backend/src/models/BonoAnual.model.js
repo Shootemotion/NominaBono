@@ -4,7 +4,7 @@ const { Schema, model } = mongoose;
 const objetivoItemSchema = new Schema({
   objetivo: { type: Schema.Types.ObjectId, ref: "Objetivo", required: false },
   nombre: String,                         // snapshot del nombre del objetivo
-  tipo: { type: String, enum: ["area","sector","individual"] },
+  tipo: { type: String, enum: ["area", "sector", "individual"] },
   kpi: String,
   target: String,
   peso: Number,                           // %
@@ -21,7 +21,7 @@ const bonoAnualSchema = new Schema({
   empleado: { type: Schema.Types.ObjectId, ref: "Empleado", required: true, index: true },
   anio: { type: Number, required: true },
 
-  estado: { type: String, enum: ["borrador","en_proceso","aprobado","pagado"], default: "borrador" },
+  estado: { type: String, enum: ["borrador", "en_proceso", "aprobado", "pagado"], default: "borrador" },
 
   snapshot: {                             // congela el contexto del empleado ese año
     puesto: String,
@@ -44,6 +44,13 @@ const bonoAnualSchema = new Schema({
     objetivos: Number,                    // ponderado final 0..100
     competencias: Number,                 // ponderado final 0..100
     total: Number,                        // 0..100
+  },
+
+  feedback: {
+    comentarioJefe: String,
+    comentarioEmpleado: String,
+    comentarioRRHH: String,
+    fechaCierre: Date,
   },
 
   bonoBase: Number,                       // sueldo base o referencia

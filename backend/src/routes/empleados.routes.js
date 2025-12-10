@@ -2,22 +2,20 @@ import { Router } from 'express';
 import {
   obtenerEmpleados,
   crearEmpleado,
-  actualizarEmpleado,  // asegúrate de tenerlo en el controller
+  actualizarEmpleado,
   eliminarEmpleado,
   subirFotoEmpleado,
-   subirCVEmpleado,
+  subirCVEmpleado,
   actualizarSueldoEmpleado,
 } from '../controllers/empleados.controller.js';
-import { requireCap } from '../auth/auth.middleware.js';
+import { requireCap, requireCapOrSelf } from '../auth/auth.middleware.js';
 import { listCarrera, createCarrera, updateCarrera, deleteCarrera } from "../controllers/carrera.controller.js";
 import { listCapacitaciones, createCapacitacion, updateCapacitacion, deleteCapacitacion } from "../controllers/capacitacion.controller.js";
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
-
-import Empleado from '../models/Empleado.model.js'; // 👈 para precargar el empleado
-
-
+import mongoose from 'mongoose';
+import Empleado from '../models/Empleado.model.js';
 
 const router = Router();
 
@@ -31,20 +29,19 @@ function slugify(s) {
     .toLowerCase();
 }
 
- // ObjectId simple check (evita cast errors de Mongoose)
- import mongoose from 'mongoose';
- function assertObjectId(req, res, next) {
-   const { id } = req.params;
-   if (!mongoose.isValidObjectId(id)) {
-     return res.status(400).json({ message: 'ID inválido' });
-   }
-   next();
- }
+// ObjectId simple check
+function assertObjectId(req, res, next) {
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) {
+    return res.status(400).json({ message: 'ID inválido' });
+  }
+  next();
+}
 
 // ---- middleware: precargar empleado por :id ----
 async function preloadEmpleado(req, res, next) {
   try {
-    const emp = await Empleado.findById(req.params.id);
+    const emp = await Empleado.findById(req.params.id).populate("area", "nombre").populate("sector", "nombre");
     if (!emp) return res.status(404).json({ message: 'Empleado no encontrado' });
     req.empleado = emp;
     next();
@@ -53,11 +50,10 @@ async function preloadEmpleado(req, res, next) {
   }
 }
 
-
 // ---- multer con destino por empleado ----
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const emp = req.empleado; // ← lo cargó preloadEmpleado
+    const emp = req.empleado;
     const legible = `${slugify(emp.apellido)}-${slugify(emp.nombre)}-${emp._id}`;
     const dir = path.join(process.cwd(), 'uploads', 'empleados', legible);
     fs.mkdirSync(dir, { recursive: true });
@@ -77,56 +73,54 @@ const upload = multer({
   }
 });
 
- // 📋 Listado + alta
- router.get('/',      requireCap('nomina:ver'),      obtenerEmpleados);
- router.post('/',     requireCap('nomina:crear'),    crearEmpleado);
+// 📋 Listado + alta
+router.get('/', requireCap('nomina:ver'), obtenerEmpleados);
+router.post('/', requireCap('nomina:crear'), crearEmpleado);
 
- // 📄 Obtener un empleado por ID (útil para legajo)
- router.get('/:id',
-   requireCap('nomina:ver'),
-   assertObjectId,
-   preloadEmpleado,
-   (req, res) => res.json(req.empleado)
- );
+// 📄 Obtener un empleado por ID (útil para legajo)
+router.get('/:id',
+  requireCapOrSelf('nomina:ver'),
+  assertObjectId,
+  preloadEmpleado,
+  (req, res) => res.json(req.empleado)
+);
 
- // ✏️ Actualizar datos del legajo
- router.patch('/:id',
-   requireCap('nomina:editar'),
-   assertObjectId,
-   actualizarEmpleado
- );
+// ✏️ Actualizar datos del legajo
+router.patch('/:id',
+  requireCapOrSelf('nomina:editar'),
+  assertObjectId,
+  actualizarEmpleado
+);
 
- // 🗑️ Eliminar empleado
- router.delete('/:id',
-   requireCap('nomina:eliminar'),
-   assertObjectId,
-   eliminarEmpleado
- );
+// 🗑️ Eliminar empleado
+router.delete('/:id',
+  requireCap('nomina:eliminar'),
+  assertObjectId,
+  eliminarEmpleado
+);
 
- // 🖼️ Subir foto al legajo → carpeta por empleado
- router.post(
-   '/:id/foto',
-   requireCap('nomina:editar'),
-   assertObjectId,
-   preloadEmpleado,            // 1) trae el empleado
-   upload.single('foto'),      // 2) guarda en /uploads/empleados/<apellido-nombre-id>/
-   subirFotoEmpleado           // 3) persiste fotoUrl y responde
- );
+// 🖼️ Subir foto al legajo → carpeta por empleado
+router.post(
+  '/:id/foto',
+  requireCapOrSelf('nomina:editar'),
+  assertObjectId,
+  preloadEmpleado,
+  upload.single('foto'),
+  subirFotoEmpleado
+);
 
- 
-
- // 💰 Actualizar sueldo base con histórico
- router.post(
-   '/:id/sueldo',
-   requireCap('nomina:editar'),
-   assertObjectId,
-   actualizarSueldoEmpleado
- );
+// 💰 Actualizar sueldo base con histórico
+router.post(
+  '/:id/sueldo',
+  requireCap('nomina:editar'),
+  assertObjectId,
+  actualizarSueldoEmpleado
+);
 
 // ---- multer para CV con destino por empleado ----
 const storageCV = multer.diskStorage({
   destination: (req, file, cb) => {
-    const emp = req.empleado; // ← lo cargó preloadEmpleado
+    const emp = req.empleado;
     const legible = `${slugify(emp.apellido)}-${slugify(emp.nombre)}-${emp._id}`;
     const dir = path.join(process.cwd(), 'uploads', 'empleados', legible);
     fs.mkdirSync(dir, { recursive: true });
@@ -140,7 +134,7 @@ const storageCV = multer.diskStorage({
 
 const uploadCV = multer({
   storage: storageCV,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB máximo
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ok = /\.(pdf|doc|docx)$/i.test(file.originalname || '');
     if (!ok) return cb(new Error('Solo se aceptan archivos PDF, DOC o DOCX'));
@@ -148,25 +142,13 @@ const uploadCV = multer({
   },
 });
 
- router.post(
+router.post(
   '/:id/cv',
   requireCap('nomina:editar'),
   preloadEmpleado,
-  uploadCV.single('cv'),     // 👈 nombre del campo de formulario
-  subirCVEmpleado            // 👈 guarda cvUrl en el empleado
+  uploadCV.single('cv'),
+  subirCVEmpleado
 );
-
-router.post(
-  '/:id/foto',
-  requireCap('nomina:editar'),
-  preloadEmpleado,
-  upload.single('foto'),
-  subirFotoEmpleado
-);
-
-
-
-
 
 /* ========== uploads certificados (capacitaciones) ========== */
 const storageCert = multer.diskStorage({
@@ -194,7 +176,7 @@ const uploadCert = multer({
 
 /* ========== CARRERA (historial de puestos) ========== */
 router.get("/:id/carrera",
-  requireCap("nomina:ver"), assertObjectId, preloadEmpleado, listCarrera);
+  requireCapOrSelf("nomina:ver"), assertObjectId, preloadEmpleado, listCarrera);
 
 router.post("/:id/carrera",
   requireCap("nomina:editar"), assertObjectId, preloadEmpleado, createCarrera);
@@ -207,7 +189,7 @@ router.delete("/:id/carrera/:itemId",
 
 /* ========== CAPACITACIONES ========== */
 router.get("/:id/capacitaciones",
-  requireCap("nomina:ver"), assertObjectId, preloadEmpleado, listCapacitaciones);
+  requireCapOrSelf("nomina:ver"), assertObjectId, preloadEmpleado, listCapacitaciones);
 
 router.post("/:id/capacitaciones",
   requireCap("nomina:editar"), assertObjectId, preloadEmpleado, uploadCert.single("certificado"), createCapacitacion);
@@ -217,4 +199,5 @@ router.put("/:id/capacitaciones/:itemId",
 
 router.delete("/:id/capacitaciones/:itemId",
   requireCap("nomina:editar"), assertObjectId, deleteCapacitacion);
+
 export default router;

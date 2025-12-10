@@ -196,6 +196,18 @@ export const requireRole = (...roles) => (req, res, next) => {
   return res.status(403).json({ message: "No autorizado", needed: roles.join(", ") });
 };
 
+export const requireCapOrSelf = (cap) => (req, res, next) => {
+  const u = req.user;
+  if (!u) return res.status(401).json({ message: "No autenticado" });
+  if (u.isSuper) return next();
+  if (u.permisos?.includes("*") || u.permisos?.includes(cap)) return next();
+
+  // Check Self
+  if (req.params.id && u.empleadoId === req.params.id) return next();
+
+  return res.status(403).json({ message: "No autorizado", needed: cap });
+};
+
 export const whoami = (req, res) => {
   res.json(req.user || { _id: "anon", rol: "visor", permisos: [] });
 };

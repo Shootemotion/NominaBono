@@ -124,7 +124,7 @@ export default function Home() {
       desc: "Proyectá el cumplimiento de metas y bonos.",
       icon: Calculator,
       to: "/simulador",
-      allow: !!user, // Allow everyone to see the simulator if they have the link, or restrict? User said "agregues la pagina de simulador". I'll allow it for now.
+      allow: hasRoleRRHH || hasRoleDirectivo || user?.isJefeArea || user?.isJefeSector,
       gradient: "from-violet-600 to-purple-600",
       textColor: "text-violet-50",
     },
@@ -154,7 +154,7 @@ export default function Home() {
       desc: "Nómina, estructura y organigrama.",
       icon: Users,
       to: "/gestion-estructura",
-      allow: canViewEstructura,
+      allow: canViewEstructura && (hasRoleRRHH || hasRoleDirectivo || user?.isJefeArea || user?.isJefeSector),
       gradient: "from-cyan-600 to-blue-600",
       textColor: "text-cyan-50",
     },

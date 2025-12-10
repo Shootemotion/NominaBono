@@ -11,7 +11,7 @@ const isValidObjectId = (v) => mongoose.Types.ObjectId.isValid(String(v));
 
 import Feedback from '../models/Feedback.model.js';
 
-async function computeForEmployees(empleadoIds, anio) {
+export async function computeForEmployees(empleadoIds, anio) {
   if (!Array.isArray(empleadoIds) || empleadoIds.length === 0) return [];
   const ids = empleadoIds.map(asObjectId);
 
@@ -183,6 +183,9 @@ async function computeForEmployees(empleadoIds, anio) {
           nombre: e.nombre,
           apellido: e.apellido,
           puesto: e.puesto,
+          fotoUrl: e.fotoUrl,
+          sueldoBase: e.sueldoBase,
+          fechaIngreso: e.fechaIngreso,
           area: e.area ? { _id: e.area._id, nombre: e.area.nombre } : null,
           sector: e.sector ? { _id: e.sector._id, nombre: e.sector.nombre } : null,
         },

@@ -25,6 +25,7 @@ import evaluacionRoutes from './src/routes/evaluacion.routes.js';
 import simulacionRoutes from './src/routes/simulacion.routes.js';
 
 import feedbackRoutes from './src/routes/feedback.routes.js';
+import bonoRoutes from './src/routes/bono.routes.js';
 
 // --- CONFIGURACIÓN INICIAL ---
 dotenv.config();
@@ -48,6 +49,7 @@ app.use('/api/areas', areasRouter);
 app.use('/api/sectores', sectoresRouter);
 app.use('/api/empleados', empleadosRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/bono', bonoRoutes);
 app.use('/api/seguimiento', seguimientoRoutes);
 app.use('/api/templates', templatesRoutes);
 app.use('/api/participaciones', participacionesRoutes);

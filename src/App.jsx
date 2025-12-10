@@ -23,6 +23,8 @@ import CompleteInvite from '@/components/CompleteInvite';
 import UsuariosAdmin from '@/pages/UsuariosAdmin';
 import GestionDepartamentos from './pages/GestionDepartamentos';
 import SimuladorObjetivos from '@/pages/SimuladorObjetivos';
+import ConfiguracionBono from '@/pages/ConfiguracionBono';
+import ResultadosBono from '@/pages/ResultadosBono';
 
 
 function App() {
@@ -62,7 +64,7 @@ function App() {
           <Route
             path="/nomina/legajo/:id"
             element={
-              <RequireAuth allow={['superadmin', 'directivo', 'rrhh']} allowReferente={true}>
+              <RequireAuth allowReferente={true}>
                 <LegajoEmpleado />
               </RequireAuth>
             }
@@ -128,6 +130,24 @@ function App() {
             element={<RequireAuth allow={['superadmin', 'directivo', 'rrhh', 'jefe_area', 'jefe_sector']}>
               <EditorAsignacion />
             </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/configuracion-bono"
+            element={
+              <RequireAuth allow={['superadmin', 'directivo', 'rrhh']}>
+                <ConfiguracionBono />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/resultados-bono"
+            element={
+              <RequireAuth allow={['superadmin', 'directivo', 'rrhh']}>
+                <ResultadosBono />
+              </RequireAuth>
             }
           />
           <Route

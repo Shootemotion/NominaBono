@@ -554,7 +554,7 @@ export async function reopenEvaluacion(req, res) {
 export async function listPendingHR(req, res) {
   try {
     const { periodo, plantillaId } = req.query;
-    const q = { estado: "PENDING_HR" };
+    const q = { estado: { $in: ["PENDING_HR", "CLOSED"] } };
     if (periodo) q.periodo = String(periodo);
     if (plantillaId)
       q.plantillaId = new mongoose.Types.ObjectId(String(plantillaId));
