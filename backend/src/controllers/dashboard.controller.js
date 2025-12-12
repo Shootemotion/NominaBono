@@ -9,40 +9,7 @@ import { generarHitos } from "../utils/generarHitos.js";
 const asObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 const isValidObjectId = (v) => mongoose.Types.ObjectId.isValid(String(v));
 
-// Helper local para periodos (eliminado duplicado)
-
 import Feedback from '../models/Feedback.model.js';
-
-
-
-// Helper for Period comparison (matches EvaluacionFlujo frontend logic)
-function getPeriodMonth(periodStr) {
-  if (!periodStr) return 0;
-  if (periodStr === "Q1") return 3;
-  if (periodStr === "Q2") return 6;
-  if (periodStr === "Q3") return 9;
-  if (periodStr === "FINAL") return 12;
-
-  const suffix = periodStr.slice(4); // Remove year "2025"?? No, usually "M01", "Q1". assuming strict format.
-  // Backend generateHitos: "M01", "Q1".
-  // EvaluacionFlujo format: periodStr.slice(4) assumes "2025Q1"? 
-  // Let's stick to the simpler backend format: "M01", "Q1", "S1", "FINAL".
-
-  // Actually, hitos in DB are usually "M01", etc.
-  if (periodStr.startsWith("M")) {
-    const m = parseInt(periodStr.slice(1));
-    return m >= 9 ? m - 8 : m + 4; // Fiscal Year Sep-Aug logic?? 
-    // Wait, the frontend says: "return m >= 9 ? m - 8 : m + 4;"
-    // This implies Fiscal Year starting in Sept?
-    // Let's copy it exactly.
-  }
-  if (periodStr.startsWith("Q")) {
-    const q = parseInt(periodStr.slice(1));
-    return q * 3;
-  }
-  if (periodStr === "FINAL") return 12;
-  return 12;
-}
 
 export async function computeForEmployees(empleadoIds, anio) {
   if (!Array.isArray(empleadoIds) || empleadoIds.length === 0) return [];
@@ -105,9 +72,6 @@ export async function computeForEmployees(empleadoIds, anio) {
 
       const empOverrides = overridesByEmp.get(empIdStr);
 
-      // Filter feedbacks for this employee (Needed for Latest Logic)
-      const empFeedbacks = feedbacksArr.filter(f => String(f.empleado) === empIdStr);
-
       for (const p of aplicables) {
         const tplIdStr = String(p._id);
         const ov = empOverrides ? empOverrides.get(tplIdStr) : null;
@@ -152,46 +116,14 @@ export async function computeForEmployees(empleadoIds, anio) {
           })
         );
 
-
-
-        const latestFeedback = [...empFeedbacks].sort((a, b) => {
-          if (a.periodo === b.periodo) return 0;
-          if (a.periodo === 'FINAL') return 1;
-          if (b.periodo === 'FINAL') return -1;
-          return a.periodo.localeCompare(b.periodo, undefined, { numeric: true });
-        }).pop();
-
-        const feedbackLimit = latestFeedback ? getPeriodMonth(latestFeedback.periodo) : 12; // Default to full year if no feedback? Or 0?
-        // If no feedback exists, maybe show 0? Or show 'current status'?
-        // User wants "result obtained in their feedback". If no feedback, maybe 0.
-        // Let's default to full year IF no feedback is found, or maybe just 0.
-        // But if we default to 12, we include future hitos.
-        // Let's default to 0 (no data) if no feedback.
-        const effectiveLimit = latestFeedback ? feedbackLimit : 0;
-
         if (p.tipo === "objetivo") {
+          // progreso promedio de hitos (o max si es acumulativo)
           const isCumulative = p.metas?.some(m => m.acumulativa || m.modoAcumulacion === 'acumulativo');
+          const progresos = hitos.map((h) => h.actual ?? 0);
 
-          // Filter hitos up to the latest feedback period
-          const relevantHitos = hitos.filter(h => getPeriodMonth(h.periodo) <= effectiveLimit);
-
-          let progreso = 0;
-          if (isCumulative) {
-            const progs = relevantHitos.map(h => h.actual).filter(v => v !== null && v !== undefined);
-            progreso = progs.length ? Math.max(...progs, 0) : 0;
-          } else {
-            // Average of VALID values only (Matches EvaluacionFlujo logic)
-            const validValues = relevantHitos.map(h => h.actual).filter(v => v !== null && v !== undefined);
-            if (validValues.length > 0) {
-              progreso = Math.round(validValues.reduce((a, b) => a + b, 0) / validValues.length);
-            } else {
-              progreso = 0;
-            }
-          }
-
-          // Apply Capping / PermiteOver Logic to match EvaluacionFlujo
-          const hasPermiteOver = p.metas?.some(m => m.permiteOver) || p.hitos?.some(h => h.metas?.some(m => m.permiteOver));
-          const effectiveProgreso = hasPermiteOver ? progreso : Math.min(progreso, 100);
+          const progreso = isCumulative
+            ? Math.max(...progresos, 0)
+            : (progresos.length ? Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length) : 0);
 
           objetivosArr.push({
             _id: p._id,
@@ -201,7 +133,7 @@ export async function computeForEmployees(empleadoIds, anio) {
             target: p.target,
             unidad: p.unidad,
             peso,
-            progreso: effectiveProgreso,
+            progreso,
             comentario: "",
             frecuencia: p.frecuencia,
             fechaLimite: p.fechaLimite,
@@ -210,20 +142,13 @@ export async function computeForEmployees(empleadoIds, anio) {
           });
 
           sumPesoObj += peso;
-          weightedProgressSum += (effectiveProgreso || 0) * peso;
+          weightedProgressSum += (progreso || 0) * peso;
         } else if (p.tipo === "aptitud") {
-          // Lógica Aptitudes: Igual que objetivos, tomar la última evaluación (foto actual)
-          // a menos que queramos promedio explícito. Por consistencia con el pedido del usuario, usamos la última.
-          // Aptitudes: Same logic (Average of evaluated)
-          // Lógica Aptitudes: Igual que objetivos, tomar la última evaluación (foto actual)
-          // Filter hitos up to the latest feedback period
-          const relevantHitos = hitos.filter(h => getPeriodMonth(h.periodo) <= effectiveLimit);
+          const puntuaciones = hitos.map((h) => h.actual ?? 0);
+          const puntuacion = puntuaciones.length
+            ? Math.round(puntuaciones.reduce((a, b) => a + b, 0) / puntuaciones.length)
+            : 0;
 
-          const validApt = relevantHitos.map(h => h.actual).filter(v => v !== null && v !== undefined);
-          let puntuacion = 0;
-          if (validApt.length > 0) {
-            puntuacion = Math.round(validApt.reduce((a, b) => a + b, 0) / validApt.length);
-          }
           aptitudesArr.push({
             _id: p._id,
             nombre: p.nombre,
@@ -241,91 +166,45 @@ export async function computeForEmployees(empleadoIds, anio) {
           sumPesoApt += peso;
           weightedAptScoreSum += puntuacion * peso;
         }
-
-
-
       }
 
-      // 🔹 CALCULO STANDARD (Recalculado)
-      // Ajuste para matching con frontend: dashboard usually overrides averages with "latest status" 
-      // Si hay feedback con Score guardado, usamos ESE como verdad.
+      const scoreObj = sumPesoObj > 0 ? weightedProgressSum / sumPesoObj : 0;
+      const scoreApt = sumPesoApt > 0 ? weightedAptScoreSum / sumPesoApt : 0;
+      const scoreFinal = Math.round((0.8 * scoreObj + 0.2 * scoreApt) * 10) / 10;
+      const bono =
+        objetivosArr.length > 0 || aptitudesArr.length > 0 ? `${scoreFinal}%` : null;
 
-      let finalObjScore = 0;
-      let finalAptScore = 0;
+      // Filter feedbacks for this employee
+      const empFeedbacks = feedbacksArr.filter(f => String(f.empleado) === empIdStr);
 
-      // Buscar feedback con scores (prioridad FINAL > Q3 > Q2 > Q1)
-      const periodOrder = ["FINAL", "Q3", "Q2", "Q1"];
-      // Ordenamos feedbacks del empleado por relevancia de periodo
-      const sortedFeedbacks = feedbacksArr
-        .filter(f => String(f.empleado) === empIdStr && f.scores && (f.scores.global || f.scores.obj || f.scores.comp))
-        .sort((a, b) => {
-          const ia = periodOrder.indexOf(a.periodo);
-          const ib = periodOrder.indexOf(b.periodo);
-          // Si ia es menor index (ej FINAL=0 vs Q1=3), es mas relevante. 
-          // Ojo: indexOf devuelve -1 si no esta. Asumimos validos.
-          return ia - ib;
-        });
-
-      const bestFeedback = sortedFeedbacks[0]; // El más relevante
-
-      if (bestFeedback && bestFeedback.scores) {
-        // USA SCORES GUARDADOS
-        finalObjScore = Number(bestFeedback.scores.obj || 0);
-        finalAptScore = Number(bestFeedback.scores.comp || 0);
-      } else {
-        // FALLBACK A CALCULO PREVIO (Promedios / Acumulados de lo que haya)
-        // Nota: El calculo original de abajo promedia hitos. 
-        // Si queremos que coincida con "lo ultimo", deberiamos tomar el ultimo hito.
-        // Pero por seguridad, mantenemos la logica de promedio ponderado si no hay feedback oficial.
-
-        if (sumPesoObj > 0) {
-          finalObjScore = weightedProgressSum / sumPesoObj;
-        }
-        if (sumPesoApt > 0) {
-          finalAptScore = weightedAptScoreSum / sumPesoApt;
-        }
+      if (process.env.NODE_ENV !== 'production' && Number(anio) === 1989) {
+        console.log(`DEBUG 1989: Emp ${empIdStr}`);
+        console.log(`- Plantillas Aplicables: ${aplicables.length}`);
+        console.log(`- Objetivos: ${objetivosArr.length}`);
+        console.log(`- Aptitudes: ${aptitudesArr.length}`);
+        if (objetivosArr.length > 0) console.log("Sample Obj:", objetivosArr[0].nombre);
       }
-
-      // Formatting
-      // finalObjScore y finalAptScore están en 0..100
-      // mixGlobal usa base 100 también.
-
-      const scoreObj = Number(finalObjScore.toFixed(2));
-      const scoreApt = Number(finalAptScore.toFixed(2));
-
-      // Importar mixGlobal si no está o replicar lógica simple (70/30 default)
-      // Replicamos la logica de mixGlobal del bono.js para no importar cruzado si no se puede
-      const pObj = 0.7;
-      const pApt = 0.3;
-      const scoreFinal = Number(((scoreObj * pObj) + (scoreApt * pApt)).toFixed(2));
 
       return {
         empleado: {
           _id: e._id,
           nombre: e.nombre,
           apellido: e.apellido,
+          puesto: e.puesto,
           fotoUrl: e.fotoUrl,
+          sueldoBase: e.sueldoBase,
+          fechaIngreso: e.fechaIngreso,
           area: e.area ? { _id: e.area._id, nombre: e.area.nombre } : null,
           sector: e.sector ? { _id: e.sector._id, nombre: e.sector.nombre } : null,
         },
-        snapshot: {
-          puesto: e.puesto,
-          fechaIngreso: e.fechaIngreso,
-          areaNombre: e.area?.nombre,
-          sectorNombre: e.sector?.nombre,
-        },
-        pesos: {
-          objetivos: 70,
-          competencias: 30,
-        },
-        resultado: {
-          objetivos: scoreObj,
-          competencias: scoreApt,
-          total: scoreFinal,
-        },
-        // Info extra para UI de Bonos
-        feedbackComentario: bestFeedback?.comentario || "", // Usamos el del feedback elegido o nada
-        feedbackPeriodo: bestFeedback?.periodo || "",
+        objetivos: { count: objetivosArr.length, sumPeso: sumPesoObj, items: objetivosArr },
+        aptitudes: { count: aptitudesArr.length, sumPeso: sumPesoApt, items: aptitudesArr },
+        // Estricto: Solo mostrar feedback si hay Objetivos. Ignorar Aptitudes (Competencias) según feedback del usuario.
+        feedbacks: (objetivosArr.length > 0) ? empFeedbacks : [],
+        scoreObj,
+        scoreApt,
+        scoreFinal,
+        bono,
       };
     })
   );
@@ -508,16 +387,11 @@ export const dashByEmpleado = async (req, res, next) => {
 
       if (p.tipo === "objetivo") {
         const isCumulative = p.metas?.some(m => m.acumulativa || m.modoAcumulacion === 'acumulativo');
+        const progresos = hitos.map((h) => h.actual ?? 0);
 
-        let progreso = 0;
-        if (isCumulative) {
-          const progresos = hitos.map((h) => h.actual).filter(v => v !== null && v !== undefined);
-          progreso = Math.max(...progresos, 0);
-        } else {
-          // Average of VALID values only
-          const validValues = hitos.map(h => h.actual).filter(v => v !== null && v !== undefined);
-          progreso = validValues.length ? Math.round(validValues.reduce((a, b) => a + b, 0) / validValues.length) : 0;
-        }
+        const progreso = isCumulative
+          ? Math.max(...progresos, 0)
+          : (progresos.length ? Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length) : 0);
 
         objetivosArr.push({
           _id: p._id,
@@ -540,9 +414,14 @@ export const dashByEmpleado = async (req, res, next) => {
         sumPesoObj += peso;
         weightedProgressSum += (progreso || 0) * peso;
       } else if (p.tipo === "aptitud") {
-        // Lógica Aptitudes: Igual que objetivos, promedio valido
-        const validApt = hitos.map(h => h.actual).filter(v => v !== null && v !== undefined);
-        const puntuacion = validApt.length ? Math.round(validApt.reduce((a, b) => a + b, 0) / validApt.length) : 0;
+        // Filter out nulls to calculate average only on evaluated hitos
+        const puntuaciones = hitos
+          .map(h => h.actual)
+          .filter(val => val !== null && val !== undefined);
+
+        const puntuacion = puntuaciones.length
+          ? Math.round(puntuaciones.reduce((a, b) => a + b, 0) / puntuaciones.length)
+          : 0;
 
         aptitudesArr.push({
           _id: p._id,
@@ -585,6 +464,8 @@ export const dashByEmpleado = async (req, res, next) => {
       },
       objetivos: { count: objetivosArr.length, sumPeso: sumPesoObj, items: objetivosArr },
       aptitudes: { count: aptitudesArr.length, sumPeso: sumPesoApt, items: aptitudesArr },
+      // Estricto: Solo mostrar feedback si hay Objetivos (ignorando Competencias/Aptitudes globales)
+      feedbacks: (objetivosArr.length > 0) ? empFeedbacks : [],
       scoreObj, scoreApt, scoreFinal, bono,
     });
   } catch (err) {
