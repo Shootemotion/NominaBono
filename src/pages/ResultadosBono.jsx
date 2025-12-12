@@ -159,20 +159,37 @@ export default function ResultadosBono() {
                                                             </div>
 
                                                             {/* 2. Feedback & Scores */}
-                                                            <div className="space-y-2">
-                                                                <div className="flex items-center justify-between text-sm">
-                                                                    <span className="text-slate-500">Objetivos ({emp.pesos?.objetivos}%):</span>
-                                                                    <span className="font-bold text-blue-600">{Math.round(emp.resultado?.objetivos || 0)}%</span>
+                                                            <div className="space-y-3">
+                                                                <div className="flex items-center justify-between text-xs text-slate-500">
+                                                                    <span>Objetivos ({emp.pesos?.objetivos}%):</span>
+                                                                    <span className="font-bold text-slate-700">{Math.round(emp.resultado?.objetivos || 0)}%</span>
                                                                 </div>
-                                                                <div className="flex items-center justify-between text-sm">
-                                                                    <span className="text-slate-500">Competencias ({emp.pesos?.competencias}%):</span>
-                                                                    <span className="font-bold text-amber-500">{Math.round(emp.resultado?.competencias || 0)}%</span>
+                                                                <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-100 pb-2">
+                                                                    <span>Competencias ({emp.pesos?.competencias}%):</span>
+                                                                    <span className="font-bold text-slate-700">{Math.round(emp.resultado?.competencias || 0)}%</span>
                                                                 </div>
-                                                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                                                                    <span className="font-bold text-slate-700 text-sm">Score Global:</span>
-                                                                    <Badge className="bg-slate-800 text-white hover:bg-slate-900">
-                                                                        {Math.round(emp.resultado?.total || 0)}%
-                                                                    </Badge>
+
+                                                                <div className="space-y-3">
+                                                                    <div className="flex items-center justify-between text-xs text-slate-500">
+                                                                        <span>Objetivos ({emp.pesos?.objetivos}%):</span>
+                                                                        <span className="font-bold text-slate-700">{Math.round(emp.resultado?.objetivos || 0)}%</span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-100 pb-2">
+                                                                        <span>Competencias ({emp.pesos?.competencias}%):</span>
+                                                                        <span className="font-bold text-slate-700">{Math.round(emp.resultado?.competencias || 0)}%</span>
+                                                                    </div>
+
+                                                                    <div className="flex items-center justify-between pt-1">
+                                                                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Score Global</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-2 h-5">
+                                                                                {emp.estado === "calculado" ? "Preliminar" : "Final"}
+                                                                            </Badge>
+                                                                            <span className="text-lg font-black text-slate-800 bg-slate-50 px-2 rounded border border-slate-200 shadow-sm">
+                                                                                {Math.round(emp.resultado?.total || 0)}%
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
 

@@ -1,8 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Save, Calculator, AlertCircle, Info } from 'lucide-react';
+import { Save, Calculator, AlertCircle, Info, Plus, Trash2, Edit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+// import { Label } from "@/components/ui/label"; // Removed missing component
+import { Input } from "@/components/ui/input";
+// Removed invalid Select imports because project uses simple select or native HTML tags
 
 export default function ConfiguracionBono() {
     const [year, setYear] = useState(new Date().getFullYear());
@@ -12,7 +22,35 @@ export default function ConfiguracionBono() {
         // pesos: { objetivos: 70, competencias: 30 }, // Removed
         escala: { tipo: "lineal", minPct: 0, maxPct: 1.0, umbral: 60, tramos: [] },
         bonoTarget: 1.0,
+        overrides: []
     });
+
+    // Override Modal State
+    const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
+    const [currentOverride, setCurrentOverride] = useState(null); // { type, targetId, ... }
+    const [catalogs, setCatalogs] = useState({ areas: [], empleados: [] });
+
+    useEffect(() => {
+        loadCatalogs();
+    }, []);
+
+    const loadCatalogs = async () => {
+        try {
+            const [a, e] = await Promise.all([api("/areas"), api("/empleados")]);
+
+            // Normalize responses
+            const areas = Array.isArray(a) ? a : (a.data || []);
+            const emps = Array.isArray(e) ? e : (e.data || []); // Adjust based on your API
+
+            setCatalogs({
+                areas: areas.map(x => ({ id: x._id, name: x.nombre })),
+                // Simple mapping for selector
+                empleados: emps.map(x => ({ id: x._id || x.id, name: `${x.apellido}, ${x.nombre}` }))
+            });
+        } catch (err) {
+            console.error("Error loading catalogs", err);
+        }
+    };
 
     useEffect(() => {
         loadConfig();
@@ -27,6 +65,7 @@ export default function ConfiguracionBono() {
                     // pesos: { objetivos: 70, competencias: 30 }, // Removed
                     escala: data.escala || { tipo: "lineal", minPct: 0, maxPct: 1.0, umbral: 60, tramos: [] },
                     bonoTarget: data.bonoTarget ?? 1.0,
+                    overrides: data.overrides || [],
                 });
             } else {
                 // Defaults
@@ -77,6 +116,68 @@ export default function ConfiguracionBono() {
         } finally {
             setCalculating(false);
         }
+    };
+
+    // --- Override Handlers ---
+    const handleAddOverride = () => {
+        setCurrentOverride({
+            isNew: true,
+            type: "area",
+            targetId: "",
+            bonoTarget: config.bonoTarget, // Default to global
+            escala: { ...config.escala }   // Default to global
+        });
+        setIsOverrideModalOpen(true);
+    };
+
+    const handleEditOverride = (index) => {
+        const ov = config.overrides[index];
+        setCurrentOverride({ ...ov, isNew: false, index });
+        setIsOverrideModalOpen(true);
+    };
+
+    const handleRemoveOverride = (index) => {
+        if (!confirm("¿Eliminar esta excepción?")) return;
+        const newOverrides = [...config.overrides];
+        newOverrides.splice(index, 1);
+        setConfig({ ...config, overrides: newOverrides });
+    };
+
+    const handleSaveOverride = () => {
+        if (!currentOverride.targetId) return toast.error("Debes seleccionar un Área o Empleado");
+
+        // Helper name
+        let targetName = "";
+        if (currentOverride.type === "area") {
+            const a = catalogs.areas.find(x => x.id === currentOverride.targetId);
+            targetName = a ? a.name : "Desconocido";
+        } else {
+            const e = catalogs.empleados.find(x => x.id === currentOverride.targetId);
+            targetName = e ? e.name : "Desconocido";
+        }
+
+        const newOv = {
+            type: currentOverride.type,
+            targetId: currentOverride.targetId,
+            targetName,
+            bonoTarget: Number(currentOverride.bonoTarget),
+            escala: {
+                ...currentOverride.escala,
+                minPct: Number(currentOverride.escala.minPct),
+                maxPct: Number(currentOverride.escala.maxPct),
+                umbral: Number(currentOverride.escala.umbral),
+            }
+        };
+
+        const newOverrides = [...(config.overrides || [])];
+        if (currentOverride.isNew) {
+            newOverrides.push(newOv);
+        } else {
+            newOverrides[currentOverride.index] = newOv;
+        }
+
+        setConfig({ ...config, overrides: newOverrides });
+        setIsOverrideModalOpen(false);
     };
 
     return (
@@ -213,6 +314,72 @@ export default function ConfiguracionBono() {
                                 <div className="text-sm text-slate-500 italic">
                                     Configuración de tramos avanzada no implementada en UI simple.
                                 </div>
+                            )}
+                        </div>
+                    </section>
+
+                    <hr className="border-slate-100" />
+
+                    {/* 3. Overrides / Excepciones */}
+                    <section>
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">3</span>
+                                Excepciones (Overrides)
+                            </div>
+                            <Button variant="outline" size="sm" onClick={handleAddOverride} className="text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100">
+                                <Plus size={16} className="mr-1" /> Agregar Excepción
+                            </Button>
+                        </h3>
+                        <p className="text-sm text-slate-500 mb-4">
+                            Configura reglas específicas para Áreas o Empleados que difieren de la regla global.
+                        </p>
+
+                        <div className="border border-slate-200 rounded-lg overflow-hidden">
+                            {(!config.overrides || config.overrides.length === 0) ? (
+                                <div className="p-8 text-center text-slate-400 bg-slate-50">
+                                    No hay excepciones configuradas. Se aplica la regla global a todos.
+                                </div>
+                            ) : (
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3">Tipo</th>
+                                            <th className="px-4 py-3">Nombre</th>
+                                            <th className="px-4 py-3">Target</th>
+                                            <th className="px-4 py-3">Escala</th>
+                                            <th className="px-4 py-3 text-right">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {config.overrides.map((ov, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50/50">
+                                                <td className="px-4 py-3 capitalize">
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${ov.type === 'area' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                        {ov.type}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 font-medium text-slate-700">{ov.targetName || "---"}</td>
+                                                <td className="px-4 py-3">{ov.bonoTarget}x</td>
+                                                <td className="px-4 py-3 text-slate-500 text-xs">
+                                                    {ov.escala.tipo === 'lineal'
+                                                        ? `Lineal (${ov.escala.umbral}% - ${ov.escala.maxPct * 100}%)`
+                                                        : "Tramos"}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button onClick={() => handleEditOverride(idx)} className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-blue-600">
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                        <button onClick={() => handleRemoveOverride(idx)} className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-rose-600">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             )}
                         </div>
                     </section>
@@ -385,6 +552,116 @@ export default function ConfiguracionBono() {
                     </div>
                 </div>
             </div>
+
+            {/* Override Modal */}
+            <Dialog open={isOverrideModalOpen} onOpenChange={setIsOverrideModalOpen}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>{currentOverride?.isNew ? 'Nueva Excepción' : 'Editar Excepción'}</DialogTitle>
+                    </DialogHeader>
+
+                    {currentOverride && (
+                        <div className="grid gap-6 py-4">
+                            {/* Target Select */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Excepción</label>
+                                    <select
+                                        className="w-full mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                        value={currentOverride.type}
+                                        onChange={(e) => setCurrentOverride({ ...currentOverride, type: e.target.value, targetId: "" })}
+                                        disabled={!currentOverride.isNew}
+                                    >
+                                        <option value="area">Por Área</option>
+                                        <option value="empleado">Por Empleado</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{currentOverride.type === 'area' ? 'Seleccionar Área' : 'Seleccionar Empleado'}</label>
+                                    <select
+                                        className="w-full mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                        value={currentOverride.targetId}
+                                        onChange={(e) => setCurrentOverride({ ...currentOverride, targetId: e.target.value })}
+                                        disabled={!currentOverride.isNew}
+                                    >
+                                        <option value="">-- Seleccionar --</option>
+                                        {currentOverride.type === 'area'
+                                            ? catalogs.areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)
+                                            : catalogs.empleados.map(e => <option key={e.id} value={e.id}>{e.name}</option>)
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <hr />
+
+                            {/* Config Fields (Same as main but specific) */}
+                            <div className="space-y-4">
+                                <h4 className="font-semibold text-sm text-slate-900">Configuración Específica</h4>
+
+                                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Bono Target (Multiplicador)</label>
+                                        <Input
+                                            type="number" step="0.1"
+                                            value={currentOverride.bonoTarget}
+                                            onChange={(e) => setCurrentOverride({ ...currentOverride, bonoTarget: e.target.value })}
+                                            className="w-32 bg-white"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Umbral (%)</label>
+                                            <Input
+                                                type="number"
+                                                value={currentOverride.escala.umbral}
+                                                onChange={(e) => setCurrentOverride({
+                                                    ...currentOverride,
+                                                    escala: { ...currentOverride.escala, umbral: e.target.value }
+                                                })}
+                                                className="bg-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">% Mínimo</label>
+                                            <Input
+                                                type="number" step="0.01"
+                                                value={currentOverride.escala.minPct}
+                                                onChange={(e) => setCurrentOverride({
+                                                    ...currentOverride,
+                                                    escala: { ...currentOverride.escala, minPct: e.target.value }
+                                                })}
+                                                className="bg-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">% Máximo (Cap)</label>
+                                            <Input
+                                                type="number" step="0.01"
+                                                value={currentOverride.escala.maxPct}
+                                                onChange={(e) => setCurrentOverride({
+                                                    ...currentOverride,
+                                                    escala: { ...currentOverride.escala, maxPct: e.target.value }
+                                                })}
+                                                className="bg-white"
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-500 italic">
+                                        Actualmente solo se soporta configuración lineal en overrides visuales.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsOverrideModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSaveOverride} className="bg-blue-600 hover:bg-blue-700">Guardar Excepción</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
