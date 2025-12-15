@@ -586,7 +586,13 @@ export default function EvaluacionFlujo() {
           year: anio,
           periodo,
           comentario,
-          estado
+          estado,
+          // Snapshot of scores at the moment of saving
+          scores: resumenEmpleado ? {
+            obj: resumenEmpleado.objetivos.score,
+            comp: resumenEmpleado.aptitudes.score,
+            global: resumenEmpleado.global
+          } : null
         }
       });
       toast.success(`Feedback ${periodo} guardado`);

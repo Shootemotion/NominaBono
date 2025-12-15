@@ -244,6 +244,13 @@ export const getResults = async (req, res, next) => {
                 feedbackComentario,
                 bonoBase,
                 bonoFinal,
+                bonusConfig: {
+                    target: activeConfig.bonoTarget || 1,
+                    type: activeConfig.escala?.tipo || "N/A",
+                    umbral: activeConfig.escala?.umbral || 0,
+                    min: activeConfig.escala?.minPct || 0,
+                    max: activeConfig.escala?.maxPct || 0,
+                },
                 estado: "calculado" // Indicate this is a live calculation
             };
         });
