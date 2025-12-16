@@ -1,7 +1,7 @@
 // src/pages/LegajoEmpleado.jsx
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { Home, Copy, Check, Briefcase, Building2, UserCircle, Mail, Phone, Calendar, Trash2 } from "lucide-react";
+import { Home, Copy, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "@/context/AuthContext";
@@ -12,9 +12,8 @@ import { API_ORIGIN } from "@/lib/api";
 /* ---------- UI helpers ---------- */
 const EstadoTag = ({ estado = "ACTIVO" }) => {
   const map = {
-    VINCULADO: "bg-emerald-500/10 text-emerald-700 border border-emerald-200",
-    ACTIVO: "bg-emerald-500/10 text-emerald-700 border border-emerald-200", // Legacy support
-    SUSPENDIDO: "bg-amber-500/10 text-amber-700 border border-amber-200", // Legacy
+    ACTIVO: "bg-emerald-500/10 text-emerald-700 border border-emerald-200",
+    SUSPENDIDO: "bg-amber-500/10 text-amber-700 border border-amber-200",
     DESVINCULADO: "bg-rose-500/10 text-rose-700 border border-rose-200",
   };
   return (
@@ -138,7 +137,6 @@ export default function LegajoEmpleado() {
     monto: "",
     moneda: "ARS",
     vigenteDesde: new Date().toISOString().slice(0, 10),
-    comentario: "", // Initialized comentario
   });
 
   // Edición de info básica (CENTRO)
@@ -182,7 +180,6 @@ export default function LegajoEmpleado() {
           vigenteDesde: e?.sueldoBase?.vigenteDesde
             ? String(e.sueldoBase.vigenteDesde).slice(0, 10)
             : new Date().toISOString().slice(0, 10),
-          comentario: "", // Initialize comentario when loading existing data
         });
 
         setBasicForm({
@@ -210,8 +207,6 @@ export default function LegajoEmpleado() {
   }, [id]);
 
   // Traer puestos si hay endpoint (no rompe si 404)
-  // Traer puestos si hay endpoint (no rompe si 404, pero ensucia log)
-  /*
   useEffect(() => {
     (async () => {
       try {
@@ -220,10 +215,9 @@ export default function LegajoEmpleado() {
           const nombres = p.map((x) => x?.nombre).filter(Boolean);
           if (nombres.length) setPuestos(nombres);
         }
-      } catch { }
+      } catch {/* noop */ }
     })();
   }, []);
-  */
 
   // Resúmenes opcionales
   useEffect(() => {
@@ -315,7 +309,6 @@ export default function LegajoEmpleado() {
         monto: Number(sueldo.monto),
         moneda: sueldo.moneda || "ARS",
         vigenteDesde: sueldo.vigenteDesde ? new Date(sueldo.vigenteDesde) : new Date(),
-        comentario: sueldo.comentario || undefined, // Include comentario in payload
       };
       if (!payload.monto || payload.monto <= 0) return toast.error("Ingresá un monto válido.");
       const resp = await api(`/empleados/${id}/sueldo`, { method: "POST", body: payload });
@@ -327,7 +320,6 @@ export default function LegajoEmpleado() {
         vigenteDesde: updEmp?.sueldoBase?.vigenteDesde
           ? String(updEmp.sueldoBase.vigenteDesde).slice(0, 10)
           : sueldo.vigenteDesde,
-        comentario: "", // Clear comentario after saving
       });
       toast.success("Sueldo actualizado y registrado en histórico.");
     } catch (e) {
@@ -355,19 +347,6 @@ export default function LegajoEmpleado() {
     }
   };
 
-  const onEliminarSueldo = async (subId) => {
-    if (!window.confirm("¿Estás seguro de eliminar este registro histórico?")) return;
-    try {
-      const resp = await api(`/empleados/${id}/sueldo/${subId}`, { method: "DELETE" });
-      const updEmp = resp?.empleado || resp;
-      setEmp(updEmp);
-      toast.success("Registro eliminado.");
-    } catch (e) {
-      console.error(e);
-      toast.error("Error al eliminar.");
-    }
-  };
-
   const onSubirFoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -384,45 +363,15 @@ export default function LegajoEmpleado() {
     }
   };
 
-  const [copiedRef, setCopiedRef] = useState(false);
-  const [copiedEmp, setCopiedEmp] = useState(false);
-  const [copiedAll, setCopiedAll] = useState(false);
-
+  const [copied, setCopied] = useState(false);
   const copyReferente = () => {
     const ref = emp?.area?.referentes?.[0];
     if (!ref) return;
     const text = `Referente: ${ref.nombre} ${ref.apellido}\nEmail: ${ref.email}\nCel: ${ref.celular || "—"}`;
     navigator.clipboard.writeText(text);
-    setCopiedRef(true);
-    setTimeout(() => setCopiedRef(false), 2000);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
     toast.success("Datos del referente copiados.");
-  };
-
-  const copyEmpleado = () => {
-    const text = `Empleado: ${emp.nombre} ${emp.apellido}\nEmail: ${emp.email}\nCel: ${emp.celular || "—"}`;
-    navigator.clipboard.writeText(text);
-    setCopiedEmp(true);
-    setTimeout(() => setCopiedEmp(false), 2000);
-    toast.success("Datos de contacto copiados.");
-  };
-
-  const copyAll = () => {
-    let text = `DATOS DE CONTACTO\n\n`;
-    text += `Empleado: ${emp.nombre} ${emp.apellido}\n`;
-    text += `Email: ${emp.email}\n`;
-    text += `Cel: ${emp.celular || "—"}\n\n`;
-
-    if (emp?.area?.referentes?.[0]) {
-      const ref = emp.area.referentes[0];
-      text += `Referente: ${ref.nombre} ${ref.apellido}\n`;
-      text += `Email: ${ref.email}\n`;
-      text += `Cel: ${ref.celular || "—"}\n`;
-    }
-
-    navigator.clipboard.writeText(text);
-    setCopiedAll(true);
-    setTimeout(() => setCopiedAll(false), 2000);
-    toast.success("Tarjeta completa copiada.");
   };
 
   if (loading) return <div className="p-6">Cargando…</div>;
@@ -488,7 +437,8 @@ export default function LegajoEmpleado() {
                     value={estadoLaboral}
                     onChange={(e) => setEstadoLaboral(e.target.value)}
                   >
-                    <option value="VINCULADO">VINCULADO</option>
+                    <option value="ACTIVO">ACTIVO</option>
+                    <option value="SUSPENDIDO">SUSPENDIDO</option>
                     <option value="DESVINCULADO">DESVINCULADO</option>
                   </select>
                   <button
@@ -547,120 +497,65 @@ export default function LegajoEmpleado() {
             </div>
 
             {/* Snapshot */}
-            <div className="rounded-2xl bg-white shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden">
-              {/* Header Gradient */}
-              <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-4 flex justify-between items-center">
-                <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                  <UserCircle size={18} className="text-white/80" />
-                  Datos Clave
-                </h3>
-                <button onClick={copyAll} className="text-white/70 hover:text-white transition-colors bg-white/10 hover:bg-white/20 p-1.5 rounded-lg" title="Copiar toda la tarjeta">
-                  {copiedAll ? <Check size={16} className="text-emerald-300" /> : <Copy size={16} />}
-                </button>
-              </div>
+            <div className="rounded-2xl bg-slate-900 p-6 text-white shadow-lg shadow-slate-900/10 relative overflow-hidden">
+              {/* Decorative circles */}
+              <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white/5 blur-2xl"></div>
+              <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full bg-white/5 blur-xl"></div>
 
-              <div className="p-6 space-y-6">
-                {/* Contacto Empleado */}
-                <div className="relative group">
-                  <div className="absolute -left-2 top-0 bottom-0 w-0.5 bg-violet-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
-                      Contacto Directo
-                    </h4>
-                    <button onClick={copyEmpleado} className="text-slate-400 hover:text-indigo-600 transition-colors" title="Copiar contacto">
-                      {copiedEmp ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    </button>
-                  </div>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 relative z-10">Datos Clave</h3>
+              <div className="space-y-4 relative z-10">
+                <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                  <span className="text-xs text-slate-400">DNI</span>
+                  <span className="font-mono text-sm font-semibold tracking-wider">{emp.dni}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                  <span className="text-xs text-slate-400">CUIL</span>
+                  <span className="font-mono text-sm font-semibold tracking-wider">{emp.cuil}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                  <span className="text-xs text-slate-400">Ingreso</span>
+                  <span className="text-sm font-medium">{emp.fechaIngreso ? String(emp.fechaIngreso).slice(0, 10) : "—"}</span>
+                </div>
+                <div className="pt-1">
+                  <div className="text-xs text-slate-400 mb-1">Estructura</div>
+                  <div className="font-medium text-sm text-blue-200">{emp?.area?.nombre || "—"}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{emp?.sector?.nombre || "—"}</div>
+                </div>
 
-                  <div className="space-y-3 pl-1">
-                    <div className="flex items-start gap-3">
-                      <Mail size={16} className="text-slate-400 mt-0.5" />
-                      <div className="flex-1">
-                        <span className="text-xs text-slate-500 block mb-0.5">Email</span>
-                        <div className="text-sm font-medium text-slate-800 break-all">{emp.email}</div>
+                {emp?.area?.referentes?.length > 0 && (
+                  <div className="pt-4 border-t border-white/10 mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Referente</h4>
+                      <button onClick={copyReferente} className="text-slate-400 hover:text-white transition-colors" title="Copiar datos">
+                        {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                    {emp.area.referentes.map(ref => (
+                      <div key={ref._id} className="text-sm space-y-1">
+                        <div className="font-semibold text-white">{ref.nombre} {ref.apellido}</div>
+                        <div className="text-xs text-slate-300">{ref.email}</div>
+                        <div className="text-xs text-slate-400">{ref.celular || "Sin celular"}</div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Phone size={16} className="text-slate-400" />
-                      <div className="flex-1">
-                        <span className="text-xs text-slate-500 block mb-0.5">Celular</span>
-                        <div className="text-sm font-medium text-slate-800">{emp.celular || "—"}</div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                </div>
-
-                <div className="border-t border-slate-100 my-4" />
-
-                {/* Identificación */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-xs text-slate-400 block mb-1">DNI</span>
-                    <div className="font-mono text-sm font-semibold text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-block w-full text-center">
-                      {emp.dni}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400 block mb-1">CUIL</span>
-                    <div className="font-mono text-sm font-semibold text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-block w-full text-center">
-                      {emp.cuil}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mt-4 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100/50">
-                  <Calendar size={16} className="text-blue-500" />
-                  <div>
-                    <span className="text-xs text-blue-400 block font-medium">Fecha de Ingreso</span>
-                    <div className="text-sm font-bold text-blue-700">{emp.fechaIngreso ? String(emp.fechaIngreso).slice(0, 10) : "—"}</div>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100 my-4" />
-
-                {/* Estructura & Referente */}
-                <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Organización</h4>
-
-                  <div className="flex items-start gap-3 mb-4">
-                    <Building2 size={16} className="text-slate-400 mt-0.5" />
-                    <div>
-                      <div className="text-sm font-semibold text-slate-800">{emp?.area?.nombre || "—"}</div>
-                      <div className="text-xs text-slate-500">{emp?.sector?.nombre || "—"}</div>
-                    </div>
-                  </div>
-
-                  {emp?.area?.referentes?.length > 0 && (
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200/60">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                          Referente
-                        </span>
-                        <button onClick={copyReferente} className="text-slate-400 hover:text-indigo-600 transition-colors" title="Copiar datos">
-                          {copiedRef ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                        </button>
-                      </div>
-                      {emp.area.referentes.map(ref => (
-                        <div key={ref._id} className="text-sm space-y-1">
-                          <div className="font-bold text-slate-800 flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-[10px] font-bold">
-                              {ref.nombre[0]}{ref.apellido[0]}
-                            </div>
-                            {ref.nombre} {ref.apellido}
-                          </div>
-                          <div className="pl-7 space-y-0.5">
-                            <div className="text-xs text-slate-500">{ref.email}</div>
-                            <div className="text-xs text-slate-400">{ref.celular || "—"}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
-
+            {/* Tips / accesos */}
+            {isRRHH && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                  <h4 className="text-xs font-bold uppercase text-slate-800 tracking-wider">Accesos rápidos</h4>
+                </div>
+                <ul className="text-sm space-y-2 text-slate-600">
+                  <li className="flex gap-2 items-start opacity-80 hover:opacity-100 transition-opacity"><span className="text-blue-400">›</span> Cambiar estado laboral desde el header</li>
+                  <li className="flex gap-2 items-start opacity-80 hover:opacity-100 transition-opacity"><span className="text-blue-400">›</span> Editar datos desde “Información básica”</li>
+                  <li className="flex gap-2 items-start opacity-80 hover:opacity-100 transition-opacity"><span className="text-blue-400">›</span> Actualizar sueldo en “Datos laborales”</li>
+                </ul>
+              </div>
+            )}
           </aside>
 
           {/* PANEL CENTRAL: Tabs siempre arriba + contenido */}
@@ -815,6 +710,9 @@ export default function LegajoEmpleado() {
                         onChange={(e) => setBasicForm(s => ({ ...s, sector: e.target.value }))}
                         disabled={!isRRHH || !basicForm.area || sectoresFiltrados.length === 0}
                       >
+                        onChange={(e) => setBasicForm(s => ({ ...s, sector: e.target.value }))}
+                        disabled={!isRRHH || !basicForm.area || sectoresFiltrados.length === 0}
+                      >
                         <option value="">
                           {!basicForm.area ? "Elegí un área primero" : (sectoresFiltrados.length ? "Seleccione un sector" : "Sin sectores")}
                         </option>
@@ -852,46 +750,27 @@ export default function LegajoEmpleado() {
 
                     {/* ACTUAL */}
                     <div className="rounded-lg border border-border/60 bg-muted/20 p-3 mb-4 flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="text-xs text-muted-foreground">Sueldo actual</div>
-                          <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-emerald-100 text-emerald-700 tracking-wider">Vigente</span>
-                        </div>
-                        <div className="text-2xl font-bold text-slate-800">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Sueldo actual</div>
+                        <div className="text-xl font-semibold">
                           {fmtMoney(emp?.sueldoBase?.monto, emp?.sueldoBase?.moneda)}
                         </div>
-                        <div className="flex items-center gap-4 mt-2">
-                          <div className="text-xs text-slate-500 font-medium">
-                            Desde: {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0, 10) : "—"}
-                          </div>
-                          {emp?.sueldoBase?.comentario && (
-                            <div className="text-xs text-slate-500 italic border-l-2 border-slate-200 pl-2 max-w-sm truncate" title={emp.sueldoBase.comentario}>
-                              “{emp.sueldoBase.comentario}”
-                            </div>
-                          )}
+                        <div className="text-xs text-muted-foreground">
+                          Vigente desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0, 10) : "—"}
                         </div>
                       </div>
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Vigente</span>
                     </div>
 
                     {/* FORM ACTUALIZAR */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div className="relative">
-                        <FieldInput
-                          label="Nuevo Monto"
-                          type="number"
-                          value={sueldo.monto}
-                          onChange={(v) => setSueldo((s) => ({ ...s, monto: v }))}
-                          disabled={!isRRHH}
-                        />
-                        {/* Percentage Badge */}
-                        {emp?.sueldoBase?.monto > 0 && sueldo.monto > 0 && sueldo.monto !== emp.sueldoBase.monto && (
-                          <div className={`absolute right-0 top-0 text-xs font-bold px-2 py-1 rounded-bl-lg rounded-tr-lg ${sueldo.monto > emp.sueldoBase.monto ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                            }`}>
-                            {sueldo.monto > emp.sueldoBase.monto ? "▲" : "▼"}
-                            {Math.abs(((sueldo.monto - emp.sueldoBase.monto) / emp.sueldoBase.monto) * 100).toFixed(2)}%
-                          </div>
-                        )}
-                      </div>
+                      <FieldInput
+                        label="Monto"
+                        type="number"
+                        value={sueldo.monto}
+                        onChange={(v) => setSueldo((s) => ({ ...s, monto: v }))}
+                        disabled={!isRRHH}
+                      />
                       <div>
                         <Label>Moneda</Label>
                         <select
@@ -920,15 +799,6 @@ export default function LegajoEmpleado() {
                           Actualizar sueldo
                         </button>
                       </div>
-                      <div className="md:col-span-4">
-                        <FieldInput
-                          label="Motivo / Comentario (Opcional)"
-                          value={sueldo.comentario}
-                          onChange={(v) => setSueldo((s) => ({ ...s, comentario: v }))}
-                          placeholder="Ej: Aumento anual por desempeño..."
-                          disabled={!isRRHH}
-                        />
-                      </div>
                     </div>
 
                     {/* HISTÓRICO */}
@@ -939,92 +809,29 @@ export default function LegajoEmpleado() {
                           <table className="min-w-[560px] w-full text-sm table-auto">
                             <thead className="sticky top-0 bg-muted/40">
                               <tr className="text-[11px] uppercase text-muted-foreground">
-                                <th className="text-left px-3 py-2">Fecha</th>
-                                <th className="text-left px-3 py-2">Monto Ant.</th>
-                                <th className="text-left px-3 py-2">Monto Nuevo</th>
-                                <th className="text-left px-3 py-2">%</th>
+                                <th className="text-left px-3 py-2">Desde</th>
+                                <th className="text-left px-3 py-2">Hasta</th>
+                                <th className="text-left px-3 py-2">Monto</th>
                                 <th className="text-left px-3 py-2">Moneda</th>
-                                <th className="text-left px-3 py-2">Comentario</th>
-                                <th className="px-3 py-2 w-10"></th>
                               </tr>
                             </thead>
                             <tbody>
-                              {(() => {
-                                // Combinar actual con histórico para mostrar toda la evolución
-                                const current = {
-                                  _id: "current",
-                                  monto: emp?.sueldoBase?.monto,
-                                  moneda: emp?.sueldoBase?.moneda,
-                                  vigenteDesde: emp?.sueldoBase?.vigenteDesde,
-                                  comentario: emp?.sueldoBase?.comentario,
-                                  isCurrent: true
-                                };
-
-                                // Si no hay sueldo actual definido, mostrar solo histórico
-                                const rawHist = historico || [];
-                                const sortedHist = [...rawHist].sort((a, b) => new Date(b.desde) - new Date(a.desde));
-
-                                // Si hay un monto actual, lo ponemos primero
-                                const allSalaries = (current.monto)
-                                  ? [current, ...sortedHist]
-                                  : sortedHist;
-
-                                if (!allSalaries.length) {
-                                  return (
-                                    <tr>
-                                      <td className="px-3 py-2 text-sm text-muted-foreground" colSpan={7}>
-                                        Sin registros.
-                                      </td>
-                                    </tr>
-                                  );
-                                }
-
-                                return allSalaries.map((h, i, arr) => {
-                                  const prevItem = arr[i + 1]; // El siguiente en la lista (más antiguo)
-                                  const prevAmount = prevItem?.monto;
-
-                                  const diffPercent = prevAmount
-                                    ? ((h.monto - prevAmount) / prevAmount) * 100
-                                    : null;
-
-                                  const dateStr = h.isCurrent
-                                    ? (h.vigenteDesde ? String(h.vigenteDesde).slice(0, 10) : "—")
-                                    : (h.desde ? String(h.desde).slice(0, 10) : "—");
-
-                                  return (
-                                    <tr key={h._id || i} className={`border-t border-border/50 transition-colors group ${h.isCurrent ? "bg-emerald-50/50 hover:bg-emerald-50" : "odd:bg-background even:bg-muted/20 hover:bg-muted/40"}`}>
-                                      <td className="px-3 py-2 font-medium">
-                                        {dateStr}
-                                        {h.isCurrent && <span className="ml-2 text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Actual</span>}
-                                      </td>
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">
-                                        {prevAmount ? fmtMoney(prevAmount, prevItem?.moneda) : "—"}
-                                      </td>
-                                      <td className="px-3 py-2 font-medium bg-slate-50/50">{fmtMoney(h?.monto, h?.moneda)}</td>
-                                      <td className="px-3 py-2 font-mono text-xs">
-                                        {diffPercent != null ? (
-                                          <span className={diffPercent > 0 ? "text-emerald-600 font-bold" : diffPercent < 0 ? "text-red-600 font-bold" : "text-slate-400"}>
-                                            {diffPercent > 0 ? "+" : ""}{diffPercent.toFixed(1)}%
-                                          </span>
-                                        ) : <span className="text-slate-300">—</span>}
-                                      </td>
-                                      <td className="px-3 py-2">{h?.moneda ?? "—"}</td>
-                                      <td className="px-3 py-2 text-xs text-muted-foreground italic max-w-[150px] truncate" title={h?.comentario}>{h?.comentario || "—"}</td>
-                                      <td className="px-3 py-2 text-right">
-                                        {isRRHH && !h.isCurrent && (
-                                          <button
-                                            onClick={() => onEliminarSueldo(h._id)}
-                                            className="text-slate-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
-                                            title="Eliminar registro"
-                                          >
-                                            <Trash2 size={14} />
-                                          </button>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                });
-                              })()}
+                              {historico.length ? (
+                                historico.map((h, i) => (
+                                  <tr key={i} className="border-t border-border/50 odd:bg-background even:bg-muted/20">
+                                    <td className="px-3 py-2">{h?.desde ? String(h.desde).slice(0, 10) : "—"}</td>
+                                    <td className="px-3 py-2">{h?.hasta ? String(h.hasta).slice(0, 10) : "—"}</td>
+                                    <td className="px-3 py-2">{fmtMoney(h?.monto, h?.moneda)}</td>
+                                    <td className="px-3 py-2">{h?.moneda ?? "—"}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td className="px-3 py-2 text-sm text-muted-foreground" colSpan={4}>
+                                    Sin registros previos.
+                                  </td>
+                                </tr>
+                              )}
                             </tbody>
                           </table>
                         </div>
@@ -1038,7 +845,7 @@ export default function LegajoEmpleado() {
                   <h3 className="text-sm font-semibold mb-2">Desarrollo Profesional</h3>
                   <div className="overflow-x-auto">
                     <div className="min-w-0">
-                      <CarreraTable empleadoId={id} canEdit={isRRHH} areas={areas} sectores={sectores} />
+                      <CarreraTable empleadoId={id} canEdit={isRRHH} />
                     </div>
                   </div>
                 </div>
