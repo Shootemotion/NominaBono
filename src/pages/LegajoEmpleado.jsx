@@ -137,6 +137,7 @@ export default function LegajoEmpleado() {
     monto: "",
     moneda: "ARS",
     vigenteDesde: new Date().toISOString().slice(0, 10),
+    comentario: "",
   });
 
   // Edición de info básica (CENTRO)
@@ -159,6 +160,8 @@ export default function LegajoEmpleado() {
   // Resúmenes (chips)
   const [resumeCarrera, setResumeCarrera] = useState({ ultimoPuesto: null });
   const [resumeCaps, setResumeCaps] = useState({ total: 0, vencen30: 0 });
+  const [docs, setDocs] = useState([]);
+  const [docForm, setDocForm] = useState({ nombre: "", archivo: null });
 
   // Carga inicial
   useEffect(() => {
@@ -180,6 +183,7 @@ export default function LegajoEmpleado() {
           vigenteDesde: e?.sueldoBase?.vigenteDesde
             ? String(e.sueldoBase.vigenteDesde).slice(0, 10)
             : new Date().toISOString().slice(0, 10),
+          comentario: e?.sueldoBase?.comentario ?? "",
         });
 
         setBasicForm({
@@ -224,7 +228,7 @@ export default function LegajoEmpleado() {
     (async () => {
       try {
         const r = await api(`/empleados/${id}/carrera/resumen`).catch(() => null);
-        if (r) setResumeCarrera({ ultimoPuesto: r?.ultimoPuesto || null });
+        if (r) setResumeCarrera({ ultimoPuesto: r?.ultimoPuesto || null, desde: r?.desde || null });
       } catch { }
       try {
         const c = await api(`/empleados/${id}/capacitaciones/resumen`).catch(() => null);
@@ -232,6 +236,15 @@ export default function LegajoEmpleado() {
       } catch { }
     })();
   }, [id]);
+
+  // Cargar documentos al entrar a la tab
+  useEffect(() => {
+    if (tab === "Documentos" && id) {
+      api(`/empleados/${id}/documentos`)
+        .then(d => setDocs(d || []))
+        .catch(err => console.error("Error cargando docs", err));
+    }
+  }, [tab, id]);
 
   // Persistir tab en URL
   useEffect(() => {
@@ -309,6 +322,7 @@ export default function LegajoEmpleado() {
         monto: Number(sueldo.monto),
         moneda: sueldo.moneda || "ARS",
         vigenteDesde: sueldo.vigenteDesde ? new Date(sueldo.vigenteDesde) : new Date(),
+        comentario: sueldo.comentario || "",
       };
       if (!payload.monto || payload.monto <= 0) return toast.error("Ingresá un monto válido.");
       const resp = await api(`/empleados/${id}/sueldo`, { method: "POST", body: payload });
@@ -320,11 +334,33 @@ export default function LegajoEmpleado() {
         vigenteDesde: updEmp?.sueldoBase?.vigenteDesde
           ? String(updEmp.sueldoBase.vigenteDesde).slice(0, 10)
           : sueldo.vigenteDesde,
+        comentario: updEmp?.sueldoBase?.comentario || "",
+      });
+      setSueldo({
+        monto: updEmp?.sueldoBase?.monto ?? "",
+        moneda: updEmp?.sueldoBase?.moneda ?? "ARS",
+        vigenteDesde: updEmp?.sueldoBase?.vigenteDesde
+          ? String(updEmp.sueldoBase.vigenteDesde).slice(0, 10)
+          : sueldo.vigenteDesde,
+        comentario: updEmp?.sueldoBase?.comentario || "",
       });
       toast.success("Sueldo actualizado y registrado en histórico.");
     } catch (e) {
       console.error(e);
       toast.error("No se pudo actualizar el sueldo.");
+    }
+  };
+
+  const onEliminarSueldo = async (subId) => {
+    if (!confirm("¿Seguro de eliminar este registro histórico?")) return;
+    try {
+      const resp = await api(`/empleados/${id}/sueldo/${subId}`, { method: "DELETE" });
+      const upd = resp?.empleado || resp;
+      setEmp(upd);
+      toast.success("Registro eliminado.");
+    } catch (e) {
+      console.error(e);
+      toast.error("No se pudo eliminar.");
     }
   };
 
@@ -437,8 +473,7 @@ export default function LegajoEmpleado() {
                     value={estadoLaboral}
                     onChange={(e) => setEstadoLaboral(e.target.value)}
                   >
-                    <option value="ACTIVO">ACTIVO</option>
-                    <option value="SUSPENDIDO">SUSPENDIDO</option>
+                    <option value="VINCULADO">VINCULADO</option>
                     <option value="DESVINCULADO">DESVINCULADO</option>
                   </select>
                   <button
@@ -465,19 +500,30 @@ export default function LegajoEmpleado() {
           <aside className="lg:col-span-4 space-y-6">
             {/* Chips resumen */}
             <div className="grid grid-cols-2 gap-4">
-              {isRRHH && (
-                <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sueldo</div>
-                  <div className="mt-2 text-lg font-bold text-slate-800 tracking-tight">{sueldoVigenteTxt}</div>
-                  <div className="mt-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 w-fit px-1.5 py-0.5 rounded-md">
-                    Desde {emp?.sueldoBase?.vigenteDesde ? String(emp.sueldoBase.vigenteDesde).slice(0, 10) : "—"}
-                  </div>
-                </div>
-              )}
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
-                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Puesto Actual</div>
+                <div className="flex justify-between items-start">
+                  <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Puesto Actual</div>
+                </div>
                 <div className="mt-2 text-sm font-bold text-slate-800 leading-tight">{ultimoPuesto}</div>
+                <div className="mt-1 text-[10px] text-slate-500 font-medium">
+                  {(() => {
+                    const start = resumeCarrera?.desde ? new Date(resumeCarrera.desde) : (emp.fechaIngreso ? new Date(emp.fechaIngreso) : null);
+                    if (!start) return "—";
+                    const diffTime = Math.abs(new Date() - start);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const years = Math.floor(diffDays / 365);
+                    const months = Math.floor((diffDays % 365) / 30);
+                    const days = (diffDays % 365) % 30;
+
+                    let txt = "";
+                    if (years > 0) txt += `${years} año${years > 1 ? "s" : ""} `;
+                    if (months > 0) txt += `${months} mes${months > 1 ? "es" : ""} `;
+                    if (!txt && days > 0) txt += `${days} día${days > 1 ? "s" : ""}`;
+                    return txt ? `En el puesto hace ${txt}` : "Recién iniciado";
+                  })()}
+                </div>
               </div>
+
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Capacitaciones</div>
                 <div className="mt-2 flex items-baseline gap-1">
@@ -485,56 +531,127 @@ export default function LegajoEmpleado() {
                   <span className="text-xs text-slate-500 font-medium">realizadas</span>
                 </div>
               </div>
-              {isRRHH && (
-                <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Vencimientos</div>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className={`text-2xl font-bold ${capsVencen > 0 ? "text-amber-500" : "text-slate-800"}`}>{capsVencen}</span>
-                    <span className="text-xs text-slate-500 font-medium">en 30 días</span>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Snapshot */}
-            <div className="rounded-2xl bg-slate-900 p-6 text-white shadow-lg shadow-slate-900/10 relative overflow-hidden">
-              {/* Decorative circles */}
-              <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white/5 blur-2xl"></div>
-              <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full bg-white/5 blur-xl"></div>
-
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 relative z-10">Datos Clave</h3>
-              <div className="space-y-4 relative z-10">
-                <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                  <span className="text-xs text-slate-400">DNI</span>
-                  <span className="font-mono text-sm font-semibold tracking-wider">{emp.dni}</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                  <span className="text-xs text-slate-400">CUIL</span>
-                  <span className="font-mono text-sm font-semibold tracking-wider">{emp.cuil}</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                  <span className="text-xs text-slate-400">Ingreso</span>
-                  <span className="text-sm font-medium">{emp.fechaIngreso ? String(emp.fechaIngreso).slice(0, 10) : "—"}</span>
-                </div>
-                <div className="pt-1">
-                  <div className="text-xs text-slate-400 mb-1">Estructura</div>
-                  <div className="font-medium text-sm text-blue-200">{emp?.area?.nombre || "—"}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{emp?.sector?.nombre || "—"}</div>
+            {/* Snapshot (Datos Clave) */}
+            <div className="rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden">
+              {/* Header Púrpura */}
+              <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  <div className="p-1.5 bg-white/20 rounded-full backdrop-blur-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="10" r="3" /><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" /></svg>
+                  </div>
+                  <h3 className="text-sm font-bold uppercase tracking-widest">Datos Clave</h3>
                 </div>
 
+                {/* Botón copiar TODO */}
+                <button
+                  onClick={() => {
+                    const ref = emp?.area?.referentes?.[0];
+                    const refText = ref ? `\n\nREFERENTE:\n${ref.nombre} ${ref.apellido}\nEmail: ${ref.email}\nCel: ${ref.celular || "—"}` : "";
+                    const text = `EMPLEADO:\n${emp.nombre} ${emp.apellido}\nDNI: ${emp.dni}\nCUIL: ${emp.cuil}\nEmail: ${emp.email}\nCel: ${emp.celular}\nDomicilio: ${emp.domicilio}${refText}`;
+                    navigator.clipboard.writeText(text);
+                    toast.success("Todos los datos copiados");
+                  }}
+                  className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors backdrop-blur-sm"
+                  title="Copiar ficha completa"
+                >
+                  <Copy size={16} />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-6">
+                {/* Contacto Directo */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">Contacto Directo</span>
+                    <button
+                      onClick={() => {
+                        const text = `${emp.nombre} ${emp.apellido}\nEmail: ${emp.email}\nCel: ${emp.celular || "—"}\nDomicilio: ${emp.domicilio || "—"}`;
+                        navigator.clipboard.writeText(text);
+                        toast.success("Contacto copiado");
+                      }}
+                      className="text-slate-400 hover:text-indigo-600 transition-colors"
+                      title="Copiar contacto"
+                    >
+                      <Copy size={14} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex gap-3 items-start group">
+                      <div className="mt-0.5 text-slate-400"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg></div>
+                      <div>
+                        <span className="block text-[10px] text-slate-500 font-medium mb-0.5">Email</span>
+                        <span className="text-sm font-medium text-slate-700 break-all">{emp.email || "—"}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 items-start group">
+                      <div className="mt-0.5 text-slate-400"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg></div>
+                      <div>
+                        <span className="block text-[10px] text-slate-500 font-medium mb-0.5">Celular</span>
+                        <span className="text-sm font-medium text-slate-700">{emp.celular || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* DNI / CUIL Pills */}
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-50">
+                  <div className="bg-slate-50 rounded-xl p-2.5 text-center border border-slate-100">
+                    <span className="block text-[10px] text-slate-400 font-bold mb-1">DNI</span>
+                    <span className="text-sm font-bold text-slate-700 tracking-wide font-mono">{emp.dni}</span>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-2.5 text-center border border-slate-100">
+                    <span className="block text-[10px] text-slate-400 font-bold mb-1">CUIL</span>
+                    <span className="text-sm font-bold text-slate-700 tracking-wide font-mono">{emp.cuil}</span>
+                  </div>
+                </div>
+
+                {/* Ingreso Highlight */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 border border-blue-100 flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg text-blue-600 shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-blue-600 font-bold uppercase">Fecha de Ingreso</span>
+                    <span className="text-sm font-bold text-blue-900">{emp.fechaIngreso ? String(emp.fechaIngreso).slice(0, 10) : "—"}</span>
+                  </div>
+                </div>
+
+                {/* Organización */}
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Organización</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="mt-1 text-slate-300"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="8" height="18" x="3" y="3" rx="1" /><path d="M7 8v.01" /><path d="M7 12v.01" /><path d="M7 16v.01" /><rect width="8" height="10" x="13" y="11" rx="1" /><path d="M17 16v.01" /></svg></div>
+                    <div>
+                      <div className="font-bold text-sm text-slate-800">{emp?.area?.nombre || "—"}</div>
+                      <div className="text-xs text-slate-500 font-medium">{emp?.sector?.nombre || "—"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Referente Card */}
                 {emp?.area?.referentes?.length > 0 && (
-                  <div className="pt-4 border-t border-white/10 mt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Referente</h4>
-                      <button onClick={copyReferente} className="text-slate-400 hover:text-white transition-colors" title="Copiar datos">
-                        {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 mt-2">
+                    <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200/60">
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Referente</h4>
+                      <button onClick={copyReferente} className="text-slate-400 hover:text-indigo-600 transition-colors" title="Copiar datos referente">
+                        {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                       </button>
                     </div>
                     {emp.area.referentes.map(ref => (
-                      <div key={ref._id} className="text-sm space-y-1">
-                        <div className="font-semibold text-white">{ref.nombre} {ref.apellido}</div>
-                        <div className="text-xs text-slate-300">{ref.email}</div>
-                        <div className="text-xs text-slate-400">{ref.celular || "Sin celular"}</div>
+                      <div key={ref._id} className="flex gap-3 items-center">
+                        <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold ring-2 ring-white">
+                          {(ref.nombre?.[0] || "") + (ref.apellido?.[0] || "")}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-800 text-xs">{ref.nombre} {ref.apellido}</div>
+                          <div className="text-[10px] text-slate-500 font-medium">{ref.email}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">{ref.celular || "Sin celular"}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -763,18 +880,20 @@ export default function LegajoEmpleado() {
                     </div>
 
                     {/* FORM ACTUALIZAR */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <FieldInput
-                        label="Monto"
-                        type="number"
-                        value={sueldo.monto}
-                        onChange={(v) => setSueldo((s) => ({ ...s, monto: v }))}
-                        disabled={!isRRHH}
-                      />
-                      <div>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                      <div className="md:col-span-3">
+                        <FieldInput
+                          label="Monto"
+                          type="number"
+                          value={sueldo.monto}
+                          onChange={(v) => setSueldo((s) => ({ ...s, monto: v }))}
+                          disabled={!isRRHH}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
                         <Label>Moneda</Label>
                         <select
-                          className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+                          className="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all disabled:bg-slate-50 disabled:text-slate-400"
                           value={sueldo.moneda}
                           onChange={(e) => setSueldo((s) => ({ ...s, moneda: e.target.value }))}
                           disabled={!isRRHH}
@@ -783,58 +902,116 @@ export default function LegajoEmpleado() {
                           <option>USD</option>
                         </select>
                       </div>
-                      <FieldInput
-                        label="Vigente desde"
-                        type="date"
-                        value={sueldo.vigenteDesde}
-                        onChange={(v) => setSueldo((s) => ({ ...s, vigenteDesde: v }))}
-                        disabled={!isRRHH}
-                      />
-                      <div className="flex items-end">
+                      <div className="md:col-span-3">
+                        <FieldInput
+                          label="Vigente desde"
+                          type="date"
+                          value={sueldo.vigenteDesde}
+                          onChange={(v) => setSueldo((s) => ({ ...s, vigenteDesde: v }))}
+                          disabled={!isRRHH}
+                        />
+                      </div>
+                      <div className="md:col-span-4">
+                        <FieldInput
+                          label="Comentario (opcional)"
+                          placeholder="Ej: Ajuste inflacionario"
+                          value={sueldo.comentario || ""}
+                          onChange={(v) => setSueldo((s) => ({ ...s, comentario: v }))}
+                          disabled={!isRRHH}
+                        />
+                      </div>
+                      <div className="md:col-span-12 flex justify-end mt-2">
                         <button
                           disabled={!isRRHH}
                           onClick={onGuardarSueldo}
-                          className="w-full rounded-md px-3 py-2 text-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                          className="rounded-lg px-4 py-2 text-sm bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors"
                         >
                           Actualizar sueldo
                         </button>
                       </div>
                     </div>
 
-                    {/* HISTÓRICO */}
-                    <div className="mt-4">
-                      <div className="text-[11px] text-muted-foreground mb-1">Histórico (no incluye el vigente)</div>
-                      <div className="overflow-x-auto">
-                        <div className="max-h-56 overflow-y-auto rounded-lg border border-border/60">
-                          <table className="min-w-[560px] w-full text-sm table-auto">
-                            <thead className="sticky top-0 bg-muted/40">
-                              <tr className="text-[11px] uppercase text-muted-foreground">
-                                <th className="text-left px-3 py-2">Desde</th>
-                                <th className="text-left px-3 py-2">Hasta</th>
-                                <th className="text-left px-3 py-2">Monto</th>
-                                <th className="text-left px-3 py-2">Moneda</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {historico.length ? (
-                                historico.map((h, i) => (
-                                  <tr key={i} className="border-t border-border/50 odd:bg-background even:bg-muted/20">
-                                    <td className="px-3 py-2">{h?.desde ? String(h.desde).slice(0, 10) : "—"}</td>
-                                    <td className="px-3 py-2">{h?.hasta ? String(h.hasta).slice(0, 10) : "—"}</td>
-                                    <td className="px-3 py-2">{fmtMoney(h?.monto, h?.moneda)}</td>
-                                    <td className="px-3 py-2">{h?.moneda ?? "—"}</td>
+                    {/* HISTÓRICO COMPLETO (Incluye vigente para ver evolución) */}
+                    <div className="mt-6">
+                      <div className="text-[11px] text-muted-foreground mb-2 font-medium uppercase tracking-wider">Historial de Actualizaciones</div>
+                      <div className="overflow-x-auto rounded-xl border border-border/60 shadow-sm bg-white">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-border/60">
+                            <tr>
+                              <th className="px-4 py-3">Vigencia</th>
+                              <th className="px-4 py-3 text-right">Sueldo Ant.</th>
+                              <th className="px-4 py-3 text-right">Sueldo Act.</th>
+                              <th className="px-4 py-3 text-center">% Ajuste</th>
+                              <th className="px-4 py-3">Comentario</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/40">
+                            {(() => {
+                              // 1. Construir lista unificada (Actual + Histórico)
+                              const actual = {
+                                monto: emp?.sueldoBase?.monto,
+                                moneda: emp?.sueldoBase?.moneda,
+                                desde: emp?.sueldoBase?.vigenteDesde,
+                                hasta: null,
+                                comentario: emp?.sueldoBase?.comentario,
+                                isCurrent: true
+                              };
+                              const hist = (emp?.sueldoBase?.historico || []).slice().sort((a, b) => new Date(b.desde) - new Date(a.desde));
+                              const fullList = [actual, ...hist];
+
+                              return fullList.map((item, i) => {
+                                // Calcular métricas contra el anterior (el siguiente en la lista ordenada desc)
+                                const prev = fullList[i + 1];
+                                const anterior = prev?.monto || 0;
+                                const hasPrev = !!prev;
+                                const diff = hasPrev ? (item.monto - anterior) : 0;
+                                const pct = (hasPrev && anterior > 0) ? (diff / anterior) * 100 : 0;
+
+                                const isPositive = pct > 0;
+
+                                return (
+                                  <tr key={i} className={`hover:bg-slate-50/50 transition-colors ${item.isCurrent ? "bg-blue-50/30" : ""}`}>
+                                    <td className="px-4 py-3">
+                                      <div className="font-medium text-slate-700">
+                                        {item.desde ? new Date(item.desde).toLocaleDateString() : "—"}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        {item.hasta ? new Date(item.hasta).toLocaleDateString() : "Actualidad"}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-slate-500">
+                                      {hasPrev ? fmtMoney(anterior, prev?.moneda) : "—"}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-bold text-slate-700">
+                                      {fmtMoney(item.monto, item.moneda)}
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      {hasPrev && (
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${isPositive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                                          {isPositive ? "+" : ""}{pct.toFixed(1)}%
+                                        </span>
+                                      )}
+                                      {!hasPrev && <span className="text-slate-300 text-[10px]">—</span>}
+                                    </td>
+                                    <td className="px-4 py-3 max-w-[200px]">
+                                      {item.comentario ? (
+                                        <div className="truncate text-slate-600" title={item.comentario}>{item.comentario}</div>
+                                      ) : (
+                                        <span className="text-slate-300 italic text-[10px]">Sin comentarios</span>
+                                      )}
+                                      {item.isCurrent && <span className="text-[9px] uppercase tracking-wide font-bold text-blue-500 block mt-0.5">Vigente</span>}
+                                    </td>
                                   </tr>
-                                ))
-                              ) : (
-                                <tr>
-                                  <td className="px-3 py-2 text-sm text-muted-foreground" colSpan={4}>
-                                    Sin registros previos.
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
+                                );
+                              });
+                            })()}
+                            {(!emp?.sueldoBase?.monto && !emp?.sueldoBase?.historico?.length) && (
+                              <tr>
+                                <td colSpan={5} className="p-4 text-center text-slate-400 italic">No hay registros de sueldo.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
@@ -865,45 +1042,150 @@ export default function LegajoEmpleado() {
 
             {/* Documentos */}
             {tab === "Documentos" && (
-              <div className="rounded-xl bg-card ring-1 ring-border/60 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold">CV del empleado</h3>
-                  {emp?.cvUrl && (
-                    <a
-                      href={(() => {
-                        const url = emp.cvUrl;
-                        if (/^https?:\/\//i.test(url)) return url;
-                        const base = (typeof API_ORIGIN === "string" && API_ORIGIN) ? API_ORIGIN : window.location.origin;
-                        return `${base.replace(/\/+$/, "")}/${String(url).replace(/^\/+/, "")}`;
-                      })()}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs underline"
-                    >
-                      Ver CV actual
-                    </a>
-                  )}
+              <div className="rounded-xl bg-card ring-1 ring-border/60 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-slate-800">Documentación del Empleado</h3>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <input
-                    ref={cvInputRef}
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    className="hidden"
-                    onChange={handleCvUpload}
-                    disabled={!canEditBasic}
-                  />
-                  <button
-                    disabled={!canEditBasic}
-                    onClick={() => cvInputRef.current?.click()}
-                    className="rounded-md px-3 py-2 text-sm bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    Subir CV
-                  </button>
+
+                {/* Formulario de Carga */}
+                {canEditBasic && (
+                  <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
+                    <h4 className="text-xs font-bold uppercase text-slate-500 mb-3 ml-1">Nuevo Documento</h4>
+                    <div className="flex flex-col md:flex-row gap-3 items-end">
+                      <div className="flex-1 w-full">
+                        <Label>Nombre / Título</Label>
+                        <input
+                          type="text"
+                          placeholder="Ej: CV 2024, Certificado Médico..."
+                          className="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 transition-all"
+                          value={docForm.nombre}
+                          onChange={(e) => setDocForm(s => ({ ...s, nombre: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex-1 w-full">
+                        <Label>Archivo</Label>
+                        <input
+                          type="file"
+                          className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                          onChange={(e) => setDocForm(s => ({ ...s, archivo: e.target.files?.[0] || null }))}
+                        />
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!docForm.nombre || !docForm.archivo) return toast.error("Completá nombre y archivo");
+                          try {
+                            const fd = new FormData();
+                            fd.append("nombre", docForm.nombre);
+                            fd.append("archivo", docForm.archivo);
+
+                            const resp = await api(`/empleados/${id}/documentos`, { method: "POST", body: fd });
+                            // recargar docs
+                            const list = await api(`/empleados/${id}/documentos`);
+                            setDocs(list || []);
+                            setDocForm({ nombre: "", archivo: null });
+                            toast.success("Documento subido.");
+                          } catch (e) {
+                            console.error(e);
+                            toast.error("Error al subir documento.");
+                          }
+                        }}
+                        className="h-10 px-5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-colors shadow-sm"
+                      >
+                        Subir
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tabla de Documentos */}
+                <div className="overflow-hidden rounded-xl border border-border/60">
+                  {/* Cargar lista al entrar */}
+                  {/* Cargar lista al entrar */}
+
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
+                      <tr>
+                        <th className="px-4 py-3">Nombre</th>
+                        <th className="px-4 py-3 w-24 text-center">Tipo</th>
+                        <th className="px-4 py-3">Fecha</th>
+                        <th className="px-4 py-3 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(docs && docs.length > 0) ? (
+                        docs.map((doc) => (
+                          <tr key={doc._id} className="hover:bg-slate-50/50 transition-colors group">
+                            <td className="px-4 py-3 font-medium text-slate-700">
+                              <div className="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
+                                {doc.nombre}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {(() => {
+                                const ext = (doc.archivoUrl || doc.nombre || "").split('.').pop().toLowerCase();
+                                let bg = "bg-slate-100 text-slate-500";
+                                if (['pdf'].includes(ext)) bg = "bg-rose-100 text-rose-700 border-rose-200";
+                                if (['doc', 'docx'].includes(ext)) bg = "bg-blue-100 text-blue-700 border-blue-200";
+                                if (['xls', 'xlsx'].includes(ext)) bg = "bg-emerald-100 text-emerald-700 border-emerald-200";
+                                if (['jpg', 'jpeg', 'png'].includes(ext)) bg = "bg-purple-100 text-purple-700 border-purple-200";
+
+                                return (
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${bg}`}>
+                                    {ext.slice(0, 4)}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-500">
+                              {new Date(doc.fechaSubida || doc.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <a
+                                  href={(() => {
+                                    const url = doc.archivoUrl || "";
+                                    if (/^https?:\/\//i.test(url)) return url;
+                                    const base = (typeof API_ORIGIN === "string" && API_ORIGIN) ? API_ORIGIN : window.location.origin;
+                                    return `${base.replace(/\/+$/, "")}/${String(url).replace(/^\/+/, "")}`;
+                                  })()}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                  title="Ver / Descargar"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                </a>
+                                {canEditBasic && (
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm("¿Eliminar este documento?")) return;
+                                      try {
+                                        await api(`/empleados/${id}/documentos/${doc._id}`, { method: "DELETE" });
+                                        setDocs(prev => prev.filter(d => d._id !== doc._id));
+                                        toast.success("Eliminado");
+                                      } catch (e) { toast.error("Error al eliminar"); }
+                                    }}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                                    title="Eliminar"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={3} className="p-8 text-center text-slate-400">
+                            No hay documentos cargados.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  Formatos: PDF, DOC, DOCX. Máx 5 MB.
-                </p>
               </div>
             )}
           </section>
