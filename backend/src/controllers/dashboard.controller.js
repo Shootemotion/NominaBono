@@ -55,11 +55,25 @@ export async function computeForEmployees(empleadoIds, anio) {
       const areaIdStr = e.area ? String(e.area._id ?? e.area) : null;
       const sectorIdStr = e.sector ? String(e.sector._id ?? e.sector) : null;
 
+      // Check if Referente
+      const isAreaReferent = e.area?.referentes?.some(r => String(r) === empIdStr);
+      const isSectorReferent = e.sector?.referentes?.some(r => String(r) === empIdStr);
+
       const aplicables = plantillas.filter((p) => {
         if (!p.scopeType || !p.scopeId) return false;
         const scopeIdStr = String(p.scopeId);
-        if (p.scopeType === "area" && areaIdStr && scopeIdStr === areaIdStr) return true;
-        if (p.scopeType === "sector" && sectorIdStr && scopeIdStr === sectorIdStr) return true;
+
+        // Exclude inheritance if Referente
+        if (p.scopeType === "area") {
+          if (isAreaReferent) return false; // Don't inherit area goals
+          if (areaIdStr && scopeIdStr === areaIdStr) return true;
+        }
+
+        if (p.scopeType === "sector") {
+          if (isSectorReferent) return false; // Don't inherit sector goals
+          if (sectorIdStr && scopeIdStr === sectorIdStr) return true;
+        }
+
         if (p.scopeType === "empleado" && scopeIdStr === empIdStr) return true;
         return false;
       });
@@ -102,6 +116,11 @@ export async function computeForEmployees(empleadoIds, anio) {
                 nombre: m.nombre || m.descripcion || "Meta",
                 esperado: m.esperado ?? m.target ?? null,
                 unidad: m.unidad ?? "",
+                reglaCierre: m.reglaCierre || "promedio",
+                umbralPeriodos: m.umbralPeriodos || 0,
+                permiteOver: m.permiteOver || false,
+                modoAcumulacion: m.modoAcumulacion || (m.acumulativa ? "acumulativo" : "periodo"),
+                reconoceEsfuerzo: m.reconoceEsfuerzo || false,
                 resultado: evaluada?.resultado ?? null,
                 cumple: evaluada?.cumple ?? false,
               };
@@ -305,12 +324,17 @@ export async function dashByArea(req, res) {
       return res.status(403).json({ message: "No autorizado para esta área" });
     }
 
+    // 🔹 Exclude Referentes from the list (Prevent self-evaluation in team view)
+    const areaDoc = await Area.findById(areaId, "referentes").lean();
+    const referentesIds = areaDoc?.referentes || [];
+
     const sectores = await Sector.find({ areaId: asObjectId(areaId) }, "_id").lean();
     const sectorIds = sectores.map((s) => s._id);
 
     const empleadosDocs = await Empleado.find(
       {
         $or: [{ area: asObjectId(areaId) }, { sector: { $in: sectorIds } }],
+        _id: { $nin: referentesIds } // Exclude referentes
       },
       { _id: 1 }
     ).lean();
@@ -342,8 +366,14 @@ export const dashBySector = async (req, res) => {
 
     }
 
+    const sectorDoc = await Sector.findById(sectorId, "referentes").lean();
+    const referentesIds = sectorDoc?.referentes || [];
+
     const empleadosDocs = await Empleado.find(
-      { sector: asObjectId(sectorId) },
+      {
+        sector: asObjectId(sectorId),
+        _id: { $nin: referentesIds } // Exclude referentes
+      },
       { _id: 1 }
     ).lean();
 
@@ -360,7 +390,7 @@ export const dashBySector = async (req, res) => {
 export const dashByEmpleado = async (req, res, next) => {
   try {
     const { empleadoId } = req.params;
-    const year = Number(req.params.year || req.query.year || new Date().getFullYear());
+    const year = Number(req.params.year || req.query.anio || req.query.year || new Date().getFullYear());
 
     const empleado = await Empleado.findById(empleadoId)
       .populate("area")

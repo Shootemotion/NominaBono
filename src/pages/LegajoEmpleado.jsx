@@ -829,7 +829,7 @@ export default function LegajoEmpleado() {
                       >
                         onChange={(e) => setBasicForm(s => ({ ...s, sector: e.target.value }))}
                         disabled={!isRRHH || !basicForm.area || sectoresFiltrados.length === 0}
-                      >
+                      
                         <option value="">
                           {!basicForm.area ? "Elegí un área primero" : (sectoresFiltrados.length ? "Seleccione un sector" : "Sin sectores")}
                         </option>

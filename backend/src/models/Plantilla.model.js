@@ -87,59 +87,61 @@ const plantillaSchema = new mongoose.Schema(
       },
     ],
 
-metas: [
-  {
-    nombre:   { type: String, required: true },
+    metas: [
+      {
+        nombre: { type: String, required: true },
 
-    // 👉 target “esperado” numérico, no solo string
-    target:   { type: String },                 // lo podés seguir usando para UI
-    esperado: { type: Number, default: null },  // usado para cálculo
+        // 👉 target “esperado” numérico, no solo string
+        target: { type: String },                 // lo podés seguir usando para UI
+        esperado: { type: Number, default: null },  // usado para cálculo
 
-    unidad: {
-      type: String,
-      enum: ["Cumple/No Cumple", "Porcentual", "Numerico"],
-      default: "Porcentual",
-    },
-    operador: {
-      type: String,
-      enum: [">=", ">", "<=", "<", "==", "!="],
-      default: ">=",
-    },
+        unidad: {
+          type: String,
+          enum: ["Cumple/No Cumple", "Porcentual", "Numerico"],
+          default: "Porcentual",
+        },
+        operador: {
+          type: String,
+          enum: [">=", ">", "<=", "<", "==", "!="],
+          default: ">=",
+        },
 
-    // ⚖️ peso interno de la meta dentro del objetivo
-    pesoMeta: { type: Number, min: 0, max: 100, default: null },
+        // ⚖️ peso interno de la meta dentro del objetivo
+        pesoMeta: { type: Number, min: 0, max: 100, default: null },
 
-    // 🎯 cómo se interpreta el valor
-    reconoceEsfuerzo: { type: Boolean, default: true },   // true = toma el % real
-    permiteOver:      { type: Boolean, default: false },  // true = puede ir a 120%
-    tolerancia:       { type: Number, default: 0 },       // ej: 2 → 78% cuenta como 80%
+        // 🎯 cómo se interpreta el valor
+        reconoceEsfuerzo: { type: Boolean, default: true },   // true = toma el % real
+        permiteOver: { type: Boolean, default: false },  // true = puede ir a 120%
+        tolerancia: { type: Number, default: 0 },       // ej: 2 → 78% cuenta como 80%
 
-    // 📈 método/“modo de seguimiento”
-    modoAcumulacion: {
-      type: String,
-      enum: ["periodo", "acumulativo"],
-      default: "periodo",
-    },
+        // 📈 método/“modo de seguimiento”
+        modoAcumulacion: {
+          type: String,
+          enum: ["periodo", "acumulativo"],
+          default: "periodo",
+        },
 
-    acumulativa: {
-      type: Boolean,
-      default: false,
-    },
+        acumulativa: {
+          type: Boolean,
+          default: false,
+        },
 
-    // 🏁 regla de cierre (a nivel meta)
-    reglaCierre: {
-      type: String,
-      enum: ["promedio", "umbral_periodos", "cierre_unico"],
-      default: "promedio",
-    },
+        // 🏁 regla de cierre (a nivel meta)
+        reglaCierre: {
+          type: String,
+          enum: ["promedio", "umbral_periodos", "cierre_unico"],
+          default: "promedio",
+        },
 
-    // opcional: si queremos que una meta tenga frecuencia distinta del objetivo
-    // frecuenciaMeta: {
-    //   type: String,
-    //   enum: ["mensual", "trimestral", "semestral", "anual"],
-    // },
-  },
-],
+        umbralPeriodos: { type: Number, default: 0 },
+
+        // opcional: si queremos que una meta tenga frecuencia distinta del objetivo
+        // frecuenciaMeta: {
+        //   type: String,
+        //   enum: ["mensual", "trimestral", "semestral", "anual"],
+        // },
+      },
+    ],
 
 
     /* --- SISTEMA DE FECHAS AUTOMÁTICAS --- */
@@ -154,7 +156,7 @@ metas: [
       required: true,
     },
 
-    
+
 
     pesoBase: { type: Number, min: 0, max: 100, required: true },
 

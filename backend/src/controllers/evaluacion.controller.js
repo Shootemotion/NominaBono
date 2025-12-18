@@ -797,7 +797,6 @@ export async function recalculateEvaluaciones(req, res) {
           if (!acumuladosPorEmpleado[empId][metaConfig._id]) acumuladosPorEmpleado[empId][metaConfig._id] = 0;
           acumuladosPorEmpleado[empId][metaConfig._id] += (Number(m.resultado) || 0);
         }
-
         // Recalcular score y cumple
         const { score, cumple } = calcularScorePeriodoMeta(cfg, valorParaCalculo);
 
@@ -845,5 +844,21 @@ export async function recalculateEvaluaciones(req, res) {
   } catch (e) {
     console.error("❌ recalculateEvaluaciones error", e);
     res.status(500).json({ message: e.message || "Error recalculando evaluaciones" });
+  }
+}
+// ... existing code ...
+
+/* ----------- DELETE (Testing Mode) ----------- */
+export async function deleteEvaluacion(req, res) {
+  try {
+    const { id } = req.params;
+    const ev = await Evaluacion.findByIdAndDelete(id);
+    if (!ev) {
+      return res.status(404).json({ message: "Evaluación no encontrada" });
+    }
+    res.json({ message: "Evaluación eliminada", id });
+  } catch (e) {
+    console.error("deleteEvaluacion error", e);
+    res.status(500).json({ message: e.message || "Error al eliminar evaluación" });
   }
 }

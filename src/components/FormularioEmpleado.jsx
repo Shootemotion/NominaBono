@@ -24,7 +24,7 @@ const fieldLabel = {
   fechaIngreso: "Fecha de ingreso",
   puesto: "Puesto",
   areaId: "Área",
-  sectorId: "Sector",
+  sectorId: "Dependencias",
   domicilio: "Domicilio",
 };
 
@@ -216,7 +216,7 @@ export default function FormularioEmpleado({
     if (isEmpty(fechaIngreso)) next.fechaIngreso = "Seleccioná la fecha de ingreso.";
     if (isEmpty(puesto)) next.puesto = "Seleccioná el puesto.";
     if (isEmpty(areaId)) next.areaId = "Seleccioná el área.";
-    if (isEmpty(sectorId)) next.sectorId = "Seleccioná el sector.";
+    // if (isEmpty(sectorId)) next.sectorId = "Seleccioná el sector."; // Optional now
     if (isEmpty(domicilio)) next.domicilio = "Ingresá el domicilio.";
 
     setErrors(next);
@@ -529,18 +529,17 @@ export default function FormularioEmpleado({
           {errors.areaId && <p className="mt-1 text-xs text-red-600">{errors.areaId}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium text-muted-foreground">Sector</label>
+          <label className="block text-sm font-medium text-muted-foreground">Dependencias (Opcional)</label>
           <select
             ref={refs.sectorId}
             className={inputCls(!!errors.sectorId)}
             value={sectorId}
             onChange={(e) => setSectorId(e.target.value)}
-            required
             aria-invalid={!!errors.sectorId}
             disabled={!areaId || !sectoresDelArea.length}
           >
             <option value="">
-              {!areaId ? "Elegí un área primero" : (sectoresDelArea.length ? "Seleccione un sector" : "Sin sectores")}
+              {!areaId ? "Elegí un área primero" : (sectoresDelArea.length ? "Seleccione dependencia" : "Sin dependencias")}
             </option>
             {sectoresDelArea.map((s) => (
               <option key={s._id} value={s._id}>
@@ -550,6 +549,7 @@ export default function FormularioEmpleado({
           </select>
           {errors.sectorId && <p className="mt-1 text-xs text-red-600">{errors.sectorId}</p>}
         </div>
+
       </div>
 
       {/* Acciones */}

@@ -119,7 +119,12 @@ export default function FormularioObjetivos({
             m.tolerancia !== undefined && m.tolerancia !== null
               ? m.tolerancia
               : 0,
+          tolerancia:
+            m.tolerancia !== undefined && m.tolerancia !== null
+              ? m.tolerancia
+              : 0,
           reglaCierre: m.reglaCierre || "promedio",
+          umbralPeriodos: m.umbralPeriodos || 0,
         }))
         : []
     );
@@ -158,7 +163,10 @@ export default function FormularioObjetivos({
         reconoceEsfuerzo: true,
         permiteOver: false,
         tolerancia: 0,
+        permiteOver: false,
+        tolerancia: 0,
         reglaCierre: "promedio",
+        umbralPeriodos: 0,
       },
     ]);
 
@@ -249,7 +257,9 @@ export default function FormularioObjetivos({
             !Number.isNaN(toleranciaNum) && toleranciaNum >= 0
               ? toleranciaNum
               : 0,
+
           reglaCierre: m.reglaCierre || "promedio",
+          umbralPeriodos: Number(m.umbralPeriodos || 0),
         };
       })
       .filter((m) => m.nombre || m.esperado !== null);
@@ -396,7 +406,7 @@ export default function FormularioObjetivos({
                 >
                   <option value="mensual">Mensual</option>
                   <option value="trimestral">Trimestral</option>
-                               </select>
+                </select>
                 <FieldError name="frecuencia" />
               </div>
             </div>
@@ -742,6 +752,26 @@ export default function FormularioObjetivos({
                           </option>
                         </select>
                       </div>
+                      {m.reglaCierre === "umbral_periodos" && (
+                        <div>
+                          <label className="mb-1 block text-xs text-muted-foreground">
+                            Umbral (Cant.)
+                          </label>
+                          <input
+                            type="number"
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            value={m.umbralPeriodos || ""}
+                            onChange={(e) =>
+                              handleMetaChange(
+                                i,
+                                "umbralPeriodos",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Ej. 3"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
