@@ -160,7 +160,7 @@ const plantillaSchema = new mongoose.Schema(
 
     pesoBase: { type: Number, min: 0, max: 100, required: true },
 
-    activo: { type: Boolean, default: true },
+    activo: { type: Boolean, default: false },
     metadata: { type: mongoose.Schema.Types.Mixed },
   },
   { timestamps: true }

@@ -11,7 +11,7 @@ router.post("/", saveFeedback);
 
 // Rutas para RRHH
 router.get("/hr/pending", getPendingFeedbacks);
-router.post("/close-bulk", closeFeedbacksBulk);
+router.post("/hr/close-bulk", closeFeedbacksBulk);
 
 // testing
 router.delete("/:id", deleteFeedback);

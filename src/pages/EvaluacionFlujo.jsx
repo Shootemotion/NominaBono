@@ -24,8 +24,13 @@ import {
   FileEdit,
   Users,
   CheckCircle,
-  Trash2
+  Trash2,
+  Printer,
+  Trophy,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
+import { ReporteFinal } from "@/components/ReporteFinal";
 
 /* ===================== Constantes y helpers ===================== */
 
@@ -151,18 +156,80 @@ function bucketConfig(bucket) {
   }
 }
 
-function getHitoStatus(hito) {
+const FISCAL_YEAR_START_MONTH = 8; // September (0-indexed = 8)
+
+function getSmartHitoStatus(hito) {
   if (hito.actual !== null || hito.estado === "CERRADO") return "evaluado";
-  if (!hito.fecha) return "futuro";
 
   const now = new Date();
-  const hitoDate = new Date(hito.fecha);
-  const diffTime = hitoDate - now;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  let startDate, deadline;
 
-  if (diffDays < 0) return "vencido";
-  if (diffDays <= 15) return "por_vencer";
-  return "futuro";
+  // Try parsing period string (e.g., "2025M12", "2025Q2")
+  const period = hito.periodo || "";
+  const yearStr = period.slice(0, 4);
+  const typeCode = period.slice(4); // "M12", "Q2"
+
+  if (!isNaN(yearStr) && typeCode) {
+    let year = parseInt(yearStr);
+
+    // --- MONTHLY LOGIC ---
+    if (typeCode.startsWith("M")) {
+      const month = parseInt(typeCode.slice(1)); // 1-12
+      // Construct Start Date: 1st of that month
+      startDate = new Date(year, month - 1, 1);
+      // Construct Deadline: 10th of the NEXT month
+      deadline = new Date(year, month, 10);
+    }
+    // --- QUARTERLY LOGIC ---
+    else if (typeCode.startsWith("Q")) {
+      const q = parseInt(typeCode.slice(1)); // 1-4
+      // Mapping Fiscal Q to Calendar Months (Assuming Fiscal Start Sep)
+      // Q1: Sep-Nov (Year)
+      // Q2: Dec (Year) - Feb (Year+1)
+      // Q3: Mar-May (Year+1)
+      // Q4: Jun-Aug (Year+1)
+
+      let startMonth; // 0-indexed
+      let endMonth;
+
+      if (q === 1) { // Sep-Nov
+        startMonth = 8; // Sep
+        // year remains same
+      } else if (q === 2) { // Dec-Feb
+        startMonth = 11; // Dec
+        // year remains same for start
+      } else if (q === 3) { // Mar-May
+        startMonth = 2; // Mar
+        year += 1; // next year
+      } else if (q === 4) { // Jun-Aug
+        startMonth = 5; // Jun
+        year += 1; // next year
+      }
+
+      startDate = new Date(year, startMonth, 1);
+      // Deadline: 10th of month AFTER quarter ends (3 months long)
+      deadline = new Date(year, startMonth + 3, 10);
+    }
+  }
+
+  // Fallback if parsing failed
+  if (!startDate) {
+    if (!hito.fecha) return "futuro";
+    startDate = new Date(hito.fecha);
+    deadline = new Date(startDate);
+    deadline.setDate(deadline.getDate() + 30); // Default 30 day window
+  }
+
+  // LOGIC
+  // If NOW < START -> Futuro
+  if (now < startDate) return "futuro";
+
+  // If NOW > DEADLINE -> Vencido
+  if (now > deadline) return "vencido";
+
+  // If NOW is between START and DEADLINE -> Por Vencer / En Curso
+  // User wants "Por Vencer" for current month M12.
+  return "por_vencer";
 }
 
 function getHitoColorClass(status) {
@@ -258,9 +325,10 @@ export default function EvaluacionFlujo() {
 
   // TESTING MODE
   const [isTestingMode, setIsTestingMode] = useState(false);
+  const [showFinalReport, setShowFinalReport] = useState(false);
 
   const handleDeleteEvaluacion = async (item, periodo) => {
-    if (!confirm(`[MODO TESTING] ¿Borrar la evaluación de ${periodo}? Esto es irreversible.`)) return;
+    if (!confirm(`[MODO ADMIN] ¿Borrar la evaluación de ${periodo}? Esto es irreversible.`)) return;
     try {
       // Find evaluation ID
       const ev = await api(`/evaluaciones?empleado=${selectedEmpleadoId}&plantillaId=${item._id}&periodo=${periodo}`);
@@ -289,7 +357,7 @@ export default function EvaluacionFlujo() {
   };
 
   const handleDeleteFeedback = async (id) => {
-    if (!confirm(`[MODO TESTING] ¿Borrar este feedback?`)) return;
+    if (!confirm(`[MODO ADMIN] ¿Borrar este feedback?`)) return;
     try {
       await api(`/feedbacks/${id}`, { method: "DELETE" });
       toast.success("Feedback eliminado");
@@ -395,6 +463,8 @@ export default function EvaluacionFlujo() {
   const loadItemEvaluacion = async (item, p) => {
     if (!selectedEmpleadoId || !item || !p) return;
     try {
+      setSavingItems(prev => ({ ...prev, [item._id]: true })); // Show loading state
+
       // 1. Traer plantilla full para asegurar metas
       let plantillaFull = item;
       if (!item.metas || item.metas.length === 0) {
@@ -443,7 +513,9 @@ export default function EvaluacionFlujo() {
             cumple: result.cumple ?? false,
             modoAcumulacion: m.modoAcumulacion ?? (m.acumulativa ? "acumulativo" : "periodo"),
             umbralPeriodos: m.umbralPeriodos || 0,
-            reglaCierre: m.reglaCierre || "promedio"
+            reglaCierre: m.reglaCierre || "promedio",
+            reconoceEsfuerzo: m.reconoceEsfuerzo ?? false,
+            permiteOver: m.permiteOver ?? false
           });
         });
 
@@ -492,6 +564,8 @@ export default function EvaluacionFlujo() {
     } catch (e) {
       console.error("Error loading item evaluation", e);
       toast.error("Error al cargar datos del objetivo");
+    } finally {
+      setSavingItems(prev => ({ ...prev, [item._id]: false })); // Clear loading
     }
   };
 
@@ -566,7 +640,7 @@ export default function EvaluacionFlujo() {
       const now = new Date();
       const target = new Date(hitoDate);
       if (now < target) {
-        toast.error("No se puede editar un periodo futuro (Activa Modo Testing)");
+        toast.error("No se puede editar un periodo futuro (Activa Modo Admin)");
         return;
       }
     }
@@ -579,7 +653,7 @@ export default function EvaluacionFlujo() {
       const body = {
         empleado: selectedEmpleadoId,
         plantillaId: item._id,
-        year: Number(String(periodoEval).slice(0, 4)),
+        year: anio, // Use context year (cycle) instead of period calendar year to ensure visibility in dashboard
         periodo: periodoEval,
         actual: actualToSend,
         comentario: localHito.comentario,
@@ -660,7 +734,7 @@ export default function EvaluacionFlujo() {
         const startDate = new Date(item.date);
         const now = new Date();
         if (now < startDate) {
-          toast.error("No se puede editar un feedback futuro (Activa Modo Testing)");
+          toast.error("No se puede editar un feedback futuro (Activa Modo Admin)");
           return;
         }
       }
@@ -715,17 +789,25 @@ export default function EvaluacionFlujo() {
   const resumenEmpleado = useMemo(() => buildResumenEmpleado(dashEmpleadoData), [dashEmpleadoData]);
   const empleadoNombreCompleto = empleadoInfo ? `${empleadoInfo.apellido} ${empleadoInfo.nombre}` : "Colaborador";
 
+  // DEBUG FINAL REPORT
+  console.log("FINAL REPORT DEBUG:", {
+    evals: dashEmpleadoData?.evaluaciones?.map(e => e.periodo),
+    feedbacks: dashEmpleadoData?.feedbacks?.map(f => f.periodo),
+    hasStart: dashEmpleadoData?.evaluaciones?.some(e => e.periodo === "FINAL"),
+    hasFeed: dashEmpleadoData?.feedbacks?.some(f => f.periodo === "FINAL")
+  });
+
   return (
 
     <div className={`min-h-screen pb-20 transition-colors duration-500 ${empleadoInfo ? (isTestingMode ? 'bg-indigo-50/50' : 'bg-slate-50') : 'bg-slate-50'}`}>
       {/* HEADER */}
-      <div className={`sticky top-0 z-50 backdrop-blur-md border-b transition-colors duration-300 ${isTestingMode
-        ? "bg-indigo-100/80 border-indigo-200"
-        : "bg-white/80 border-slate-200"
+      <div className={`sticky top-0 z-30 backdrop-blur-md border-b transition-all duration-300 ${isTestingMode
+        ? "bg-gradient-to-r from-indigo-50/95 via-white/95 to-indigo-50/95 border-indigo-200"
+        : "bg-gradient-to-r from-slate-50/95 via-white/95 to-blue-50/95 border-slate-200"
         }`}>
         <div className="max-w-[1600px] mx-auto px-6 py-4">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col items-start gap-4">
               <Button variant="ghost" size="sm" onClick={() => state?.from === "seguimiento" ? navigate("/seguimiento") : navigate(-1)} className={isTestingMode ? "text-indigo-600 hover:text-indigo-800 hover:bg-indigo-200/50" : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"}>
                 {state?.from === "seguimiento" ? "← Volver al Gantt" : "← Volver"}
               </Button>
@@ -736,30 +818,15 @@ export default function EvaluacionFlujo() {
                     {anio}
                   </Badge>
                 </h1>
-                <p className={isTestingMode ? "text-xs text-indigo-500 font-medium" : "text-xs text-slate-500"}>{isTestingMode ? "Modo Testing Activo" : "Sala de Evaluación"}</p>
+
+                <p className={isTestingMode ? "text-xs text-indigo-500 font-medium" : "text-xs text-slate-500"}>{isTestingMode ? "Modo Admin Activo" : "Sala de Evaluación"}</p>
               </div>
+
+              {/* (Button Removed from Left Side) */}
             </div>
 
             {/* TABS NAVIGATION */}
-            <div className="flex items-center gap-4">
-              {/* TESTING MODE TOGGLE */}
-              {puedeVer && (
-                <label className={`flex items-center gap-2 cursor-pointer border px-3 py-1.5 rounded-lg transition-colors ${isTestingMode
-                  ? "bg-white border-indigo-200 shadow-sm"
-                  : "bg-white border-slate-200 hover:bg-slate-50"
-                  }`}>
-                  <input
-                    type="checkbox"
-                    className="accent-indigo-500 w-4 h-4"
-                    checked={isTestingMode}
-                    onChange={(e) => setIsTestingMode(e.target.checked)}
-                  />
-                  <span className={`text-xs font-bold uppercase tracking-wider ${isTestingMode ? 'text-indigo-600' : 'text-slate-600'}`}>
-                    Modo Testing
-                  </span>
-                </label>
-              )}
-
+            <div className="flex-1 flex justify-center">
               <div className={`flex p-1 rounded-lg border ${isTestingMode
                 ? "bg-indigo-50 border-indigo-200"
                 : "bg-slate-100 border-slate-200"
@@ -785,30 +852,80 @@ export default function EvaluacionFlujo() {
                   Feedback Trimestral
                 </button>
               </div>
+            </div>
 
-              {/* Global Score Compact */}
-              {resumenEmpleado && (
-                <div className={`hidden xl:flex items-center gap-4 py-1 px-3 rounded-full border ${isTestingMode ? "bg-white/50 border-indigo-200" : "bg-white border-slate-200 shadow-sm"}`}>
-                  <div className="flex items-center gap-2 pr-3 border-r border-slate-200/50">
-                    <span className={`text-[9px] font-bold uppercase tracking-wider ${isTestingMode ? "text-indigo-400" : "text-slate-400"}`}>OBJ</span>
-                    <span className="text-sm font-bold text-blue-600">{Math.round(resumenEmpleado.objetivos.score)}%</span>
-                  </div>
-                  <div className="flex items-center gap-2 pr-3 border-r border-slate-200/50">
-                    <span className={`text-[9px] font-bold uppercase tracking-wider ${isTestingMode ? "text-indigo-400" : "text-slate-400"}`}>COMP</span>
-                    <span className="text-sm font-bold text-amber-600">{Math.round(resumenEmpleado.aptitudes.score)}%</span>
-                  </div>
-                  <div className="flex items-center gap-2 pl-1">
-                    <span className={`text-[9px] font-black uppercase tracking-wider ${isTestingMode ? "text-emerald-400" : "text-emerald-600"}`}>GLOBAL</span>
-                    <span className="text-base font-black text-emerald-500">{Math.round(resumenEmpleado.global)}%</span>
+            {/* FINAL REPORT BUTTON (RIGHT SIDE placement) */}
+            {(dashEmpleadoData?.evaluaciones?.some(e => e.periodo === "FINAL") || dashEmpleadoData?.feedbacks?.some(f => f.periodo === "FINAL")) && (
+              <div className="hidden lg:block mr-4">
+                <Button
+                  size="sm"
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md border-0"
+                  onClick={() => setShowFinalReport(true)}
+                >
+                  <Trophy className="w-4 h-4 mr-2" />
+                  Reporte Final
+                </Button>
+              </div>
+            )}
+
+            {/* GLOBAL & OPTIONS */}
+            <div className="flex items-center gap-4">
+
+              {/* TESTING MODE TOGGLE (Only Directors) */}
+              {esDirector && (
+                <label className={`flex items-center gap-2 cursor-pointer border px-3 py-1.5 rounded-lg transition-colors ${isTestingMode
+                  ? "bg-white border-indigo-200 shadow-sm"
+                  : "bg-white border-slate-200 hover:bg-slate-50"
+                  }`}>
+                  <input
+                    type="checkbox"
+                    className="accent-indigo-500 w-4 h-4"
+                    checked={isTestingMode}
+                    onChange={(e) => setIsTestingMode(e.target.checked)}
+                  />
+                  <span className={`text-xs font-bold uppercase tracking-wider ${isTestingMode ? 'text-indigo-600' : 'text-slate-600'}`}>
+                    Modo Admin
+                  </span>
+                </label>
+              )}
+
+              <div className={`flex items-stretch rounded-xl border shadow-sm overflow-hidden divide-x divide-slate-100 ${isTestingMode
+                ? "border-indigo-200"
+                : "border-slate-200"
+                }`}>
+                {/* Objectives (Pale Blue) */}
+                <div className={`flex flex-col justify-center px-6 py-2 ${isTestingMode ? "bg-indigo-50/50" : "bg-blue-50/50"}`}>
+                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 text-right">Obj.</div>
+                  <div className={`text-sm font-bold leading-none text-right ${isTestingMode ? "text-indigo-700" : "text-blue-700"}`}>
+                    {resumenEmpleado?.objetivos?.score !== undefined ? Math.round(resumenEmpleado.objetivos.score) : "-"}%
                   </div>
                 </div>
-              )}
+
+                {/* Competencies (Pale Slate/Purple) */}
+                <div className="flex flex-col justify-center px-6 py-2 bg-slate-50/80">
+                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 text-right">Comp.</div>
+                  <div className="text-sm font-bold text-slate-700 leading-none text-right">
+                    {resumenEmpleado?.aptitudes?.score !== undefined ? Math.round(resumenEmpleado.aptitudes.score) : "-"}%
+                  </div>
+                </div>
+
+                {/* Global (Pale Emerald - Distinct but Light) */}
+                <div className={`flex flex-col justify-center px-8 py-2 relative overflow-hidden group ${isTestingMode ? "bg-indigo-100/30" : "bg-emerald-50/50"}`}>
+                  {/* Subtle top decoration line */}
+                  <div className={`absolute top-0 left-0 right-0 h-0.5 ${isTestingMode ? "bg-indigo-300" : "bg-emerald-300"}`}></div>
+
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mb-0.5 text-right ${isTestingMode ? "text-indigo-500" : "text-emerald-600"}`}>Global</div>
+                  <div className={`text-2xl font-black leading-none tracking-tight text-right ${isTestingMode ? "text-indigo-700" : "text-emerald-700"}`}>
+                    {resumenEmpleado?.global !== undefined ? Math.round(resumenEmpleado.global) : "-"}%
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="max-w-[1600px] mx-auto px-6 py-8">
+        <div className="max-w-[1600px] mx-auto px-6 py-8 min-h-screen">
 
           {/* TAB: EVALUACION */}
           {activeTab === "evaluacion" && (
@@ -828,13 +945,11 @@ export default function EvaluacionFlujo() {
                       <CardHeader className="py-2 px-3 cursor-pointer bg-white hover:bg-slate-50/50 transition-colors" onClick={() => toggleExpand(obj)}>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           {/* Title & Badge */}
-                          <div className="flex items-center gap-3 overflow-hidden">
-                            <Badge variant="outline" className={`${bucketCfg.badgeClass} border-transparent font-semibold px-1.5 py-0 text-[9px] rounded-md shrink-0`}>
+                          <div className="flex items-start gap-3">
+                            <Badge variant="secondary" className={`${bucketCfg.badgeClass} text-[10px] px-2 shrink-0 whitespace-nowrap mt-0.5`}>
                               {bucketCfg.chip}
                             </Badge>
-                            <CardTitle className="text-sm font-bold text-slate-700 leading-tight truncate" title={obj.nombre}>
-                              {obj.nombre}
-                            </CardTitle>
+                            <span className="text-sm font-bold text-slate-700 leading-snug">{obj.nombre}</span>
                           </div>
 
                           {/* Metrics Grid */}
@@ -865,185 +980,226 @@ export default function EvaluacionFlujo() {
                       </CardHeader>
 
                       {isExpanded && (
-                        <CardContent className="pt-0 pb-4 px-4 bg-slate-50/30 border-t border-slate-100">
-                          {/* Milestone Selector */}
+                        <CardContent className="p-0 border-t border-slate-100">
+                          {/* SECTION 1: TIMELINE */}
                           {obj.hitos && obj.hitos.length > 0 && (
-                            <div className="mb-4 mt-4">
-                              <label className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded inline-block font-bold uppercase mb-2 tracking-wide">Cronograma de Hitos</label>
-                              <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-2">
+                            <div className="bg-slate-50 border-b-4 border-slate-100/50 p-5">
+                              <label className="text-[9px] text-slate-400 font-bold uppercase mb-3 block tracking-wide flex items-center gap-1">
+                                <Calendar className="w-3 h-3" /> Cronograma
+                              </label>
+                              <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar mask-gradient-r">
                                 {obj.hitos.map((h) => {
-                                  const status = getHitoStatus(h);
+                                  const status = getSmartHitoStatus(h);
                                   const colorClass = getHitoColorClass(status);
                                   const isSelected = localHito?.periodo === h.periodo;
                                   const isSelectable = status === "vencido" || status === "por_vencer" || status === "evaluado";
+                                  const isLoading = savingItems[obj._id] && !localHito;
 
                                   return (
                                     <div
                                       key={h.periodo}
-                                      onClick={() => (isSelectable || (isTestingMode && puedeVer)) && loadItemEvaluacion(obj, h.periodo)}
-                                      className={`flex flex-col items-center justify-center py-1.5 px-1 rounded border transition-all duration-200 relative ${colorClass} 
-                                      ${isSelected ? 'ring-2 ring-offset-1 ring-blue-500 shadow-sm scale-105 z-10' : ''} 
-                                      ${isSelectable || (isTestingMode && puedeVer) ? 'cursor-pointer hover:shadow-sm hover:-translate-y-0.5' : 'opacity-40 grayscale cursor-not-allowed'}`}
+                                      onClick={() => (isSelectable || (isTestingMode && puedeVer)) && !savingItems[obj._id] && loadItemEvaluacion(obj, h.periodo)}
+                                      className={`flex flex-col items-center justify-center py-1.5 px-3 min-w-[42px] shrink-0 rounded border transition-all duration-200 relative ${colorClass} 
+                                      ${isSelected ? 'ring-1 ring-blue-400 shadow-sm scale-105 z-10' : ''} 
+                                      ${(isSelectable || (isTestingMode && puedeVer)) && !savingItems[obj._id] ? 'cursor-pointer hover:shadow-sm hover:-translate-y-0.5' : 'opacity-40 grayscale cursor-not-allowed'}
+                                      ${isLoading && isSelected ? 'animate-pulse' : ''}`}
                                     >
-                                      <span className="text-[9px] font-black uppercase tracking-tight">{h.periodo}</span>
-                                      <span className="text-[10px] font-semibold mt-0">{h.actual !== null ? `${Math.round(h.actual)}%` : "-"}</span>
+                                      <span className="text-[8px] font-black uppercase tracking-tight leading-none mb-0.5">{h.periodo}</span>
+                                      <span className="text-[10px] font-bold leading-none">{h.actual !== null ? `${Math.round(h.actual)}%` : "-"}</span>
                                     </div>
                                   );
                                 })}
+                              </div>
+
+                              {/* CENTRALLY ALIGNED LEGEND */}
+                              <div className="flex items-center justify-center gap-4 mt-3 pt-2 border-t border-slate-200/50 w-full opacity-80">
+                                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-100 border border-emerald-300"></div><span className="text-[9px] text-slate-500 font-medium">Evaluado</span></div>
+                                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-100 border border-amber-300"></div><span className="text-[9px] text-slate-500 font-medium">Por Vencer</span></div>
+                                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-100 border border-rose-300"></div><span className="text-[9px] text-slate-500 font-medium">Vencido</span></div>
+                                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-50 border border-blue-200"></div><span className="text-[9px] text-slate-500 font-medium">Futuro</span></div>
                               </div>
                             </div>
                           )}
 
                           {localHito ? (
-                            <div className="space-y-4 mt-4 animate-in slide-in-from-top-4 duration-300">
-                              {/* Evaluation Header */}
-                              {/* Evaluation Header */}
-                              {/* Evaluation Header */}
-                              <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl shadow-sm border mb-6 ${isTestingMode
-                                ? "bg-gradient-to-br from-indigo-50 to-white text-slate-800 border-indigo-100 shadow-indigo-100"
-                                : "bg-white border-slate-200 shadow-sm"
-                                }`}>
-                                <div className="flex items-center gap-3">
-                                  <div className={`p-2 rounded-lg border ${isTestingMode ? "bg-indigo-100 border-indigo-200" : "bg-blue-50 border-blue-100"}`}>
-                                    <Calendar className={`w-5 h-5 ${isTestingMode ? "text-indigo-600" : "text-blue-600"}`} />
-                                  </div>
-                                  <div>
-                                    <h4 className={`text-sm font-medium uppercase tracking-wide ${isTestingMode ? "text-indigo-500" : "text-slate-500"}`}>Evaluación del Período</h4>
-                                    <div className={`text-2xl font-bold tracking-tight ${isTestingMode ? "text-indigo-900" : "text-slate-800"}`}>{localHito.periodo}</div>
-                                  </div>
-                                </div>
+                            <div className="animate-in fade-in duration-300">
+                              {/* SECTION 2: CONTEXT (Header + Score) */}
+                              <div className="p-5 border-b-4 border-slate-100/50 bg-white">
+                                <div className="flex flex-col sm:flex-row gap-6">
+                                  {/* Left: Description & Meta Data */}
+                                  <div className="flex-1 space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[9px] px-2 uppercase tracking-wide">
+                                        {obj.frecuencia || "Objetivo"}
+                                      </Badge>
+                                      {obj.proceso && (
+                                        <Badge variant="secondary" className="bg-slate-100 text-slate-500 border-slate-200 text-[9px] px-2 font-medium">
+                                          {obj.proceso}
+                                        </Badge>
+                                      )}
+                                      <span className="text-xs font-bold text-slate-700">{localHito.periodo}</span>
+                                    </div>
 
-                                <div className={`flex items-center gap-3 pl-4 pr-5 py-2 rounded-xl border backdrop-blur-sm ${isTestingMode
-                                  ? "bg-white/50 border-indigo-100"
-                                  : "bg-slate-50 border-slate-100"
-                                  }`}>
-                                  <div className="text-right">
-                                    <div className={`text-[10px] font-bold uppercase tracking-wider ${isTestingMode ? "text-indigo-400" : "text-slate-500"}`}>Score Hito</div>
-                                    <div className={`text-2xl font-black ${Number(localHito.actual) >= 100
-                                      ? "text-emerald-500"
-                                      : isTestingMode ? "text-indigo-600" : "text-slate-800"
-                                      }`}>
-                                      {Number(localHito.actual).toFixed(1)}%
+                                    <div className="text-sm text-slate-600 leading-relaxed border-l-2 border-slate-200 pl-3">
+                                      {obj.descripcion || <span className="italic text-slate-400">Sin descripción</span>}
+                                    </div>
+                                  </div>
+
+                                  {/* Right: Score Box */}
+                                  <div className="shrink-0 flex items-center justify-center">
+                                    <div className={`flex flex-col items-center justify-center w-28 h-20 rounded-xl border-2 ${isTestingMode ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
+                                      <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Score Hito</span>
+                                      <span className={`text-2xl font-black ${Number(localHito.actual) >= 100 ? "text-emerald-500" : "text-slate-800"}`}>
+                                        {Number(localHito.actual).toFixed(1)}%
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Metas List */}
-                              <div className="space-y-3">
-                                {localHito.metas.map((meta, idx) => {
-                                  const isAcumulativo = meta.modoAcumulacion === "acumulativo";
-                                  const valorEvaluado = isAcumulativo
-                                    ? getAccumulatedValue(obj, meta.metaId || meta._id, localHito.periodo, meta.resultado)
-                                    : meta.resultado;
+                              {/* SECTION 3: METAS */}
+                              <div className="p-5 border-b-4 border-slate-100/50 bg-white">
+                                <div className="mb-4 flex items-center gap-2">
+                                  <Target className="w-3 h-3 text-slate-400" />
+                                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Metas</span>
+                                </div>
+                                <div className="space-y-4">
+                                  {localHito.metas.map((meta, idx) => {
+                                    const isAcumulativo = meta.modoAcumulacion === "acumulativo";
+                                    const valorEvaluado = isAcumulativo
+                                      ? getAccumulatedValue(obj, meta.metaId || meta._id, localHito.periodo, meta.resultado)
+                                      : meta.resultado;
 
-                                  const cumple = evaluarCumple(valorEvaluado, meta.esperado, meta.operador, meta.unidad);
+                                    const cumple = evaluarCumple(valorEvaluado, meta.esperado, meta.operador, meta.unidad);
 
-                                  return (
-                                    <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200 space-y-3 group">
-                                      <div className="flex justify-between items-start gap-4">
-                                        <div className="flex-1 space-y-1">
-                                          <div className="font-bold text-sm text-slate-800 leading-snug col-span-1 group-hover:text-blue-700 transition-colors">
-                                            {meta.nombre}
+                                    return (
+                                      <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200 space-y-3 group">
+                                        <div className="flex justify-between items-start gap-4">
+                                          <div className="flex-1 space-y-1">
+                                            <div className="font-bold text-sm text-slate-800 leading-snug col-span-1 group-hover:text-blue-700 transition-colors">
+                                              {meta.nombre}
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2 text-[10px] items-center mt-3">
+                                              {/* Target Chip */}
+                                              <div className="flex items-center bg-slate-100 text-slate-700 px-2 py-1 rounded-md border border-slate-200 font-medium">
+                                                <span className="text-slate-400 mr-1.5 uppercase text-[9px] tracking-wider font-bold">Meta:</span>
+                                                <span className="font-mono text-xs">{meta.operador} {meta.esperado} {meta.unidad}</span>
+                                              </div>
+
+                                              {/* Badges Layout */}
+                                              <div className="flex gap-1.5 flex-wrap">
+                                                {/* Peso - MOVED HERE */}
+                                                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-bold shadow-sm">
+                                                  {meta.pesoMeta || 100}%
+                                                </span>
+
+                                                {/* Tolerancia - MOVED HERE */}
+                                                {meta.tolerancia > 0 && (
+                                                  <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-bold shadow-sm">
+                                                    Tol: {meta.tolerancia}%
+                                                  </span>
+                                                )}
+
+                                                {/* Closure Rule */}
+                                                <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100 font-semibold shadow-sm">
+                                                  {getCierreLabel(meta)}
+                                                </span>
+
+                                                {/* Accumulative */}
+                                                {isAcumulativo && (
+                                                  <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-100 font-semibold shadow-sm flex items-center gap-1">
+                                                    <RefreshCw className="w-3 h-3" /> Acum.
+                                                  </span>
+                                                )}
+
+                                                {/* Over */}
+                                                {meta.permiteOver && (
+                                                  <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100 font-semibold shadow-sm">
+                                                    Over
+                                                  </span>
+                                                )}
+                                                {/* Effort Recognition */}
+                                                {meta.reconoceEsfuerzo && (
+                                                  <span className="bg-sky-50 text-sky-700 px-2 py-0.5 rounded border border-sky-100 font-semibold shadow-sm flex items-center gap-1">
+                                                    <Lightbulb className="w-3 h-3" /> Esfuerzo
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
                                           </div>
 
-                                          <div className="flex flex-wrap gap-2 text-[10px] items-center mt-2">
-                                            {/* Target Chip */}
-                                            <div className="flex items-center bg-slate-100 text-slate-700 px-2 py-1 rounded-md border border-slate-200 font-medium">
-                                              <span className="text-slate-400 mr-1.5 uppercase text-[9px] tracking-wider font-bold">Meta:</span>
-                                              <span className="font-mono text-xs">{meta.operador} {meta.esperado} {meta.unidad}</span>
-                                            </div>
-
-                                            {/* Badges Layout */}
-                                            <div className="flex gap-1.5">
-                                              {/* Closure Rule - ALWAYS VISIBLE */}
-                                              <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100 font-semibold shadow-sm">
-                                                {getCierreLabel(meta)}
-                                              </span>
-
-                                              {/* Accumulative */}
-                                              {isAcumulativo && (
-                                                <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-100 font-semibold shadow-sm flex items-center gap-1">
-                                                  <RefreshCw className="w-3 h-3" /> Acum.
+                                          <div className="w-32 min-w-[120px]">
+                                            <label className="text-[9px] uppercase font-bold text-slate-400 mb-1 block">Resultado</label>
+                                            {meta.unidad === "Cumple/No Cumple" ? (
+                                              <label className={`flex items-center gap-2 p-1.5 rounded border-2 cursor-pointer transition-all ${meta.resultado ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}>
+                                                <input
+                                                  type="checkbox"
+                                                  className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
+                                                  checked={!!meta.resultado}
+                                                  onChange={(e) => {
+                                                    const val = e.target.checked;
+                                                    handleUpdateLocalHito(obj._id, (prev) => {
+                                                      const metas = [...prev.metas];
+                                                      metas[idx] = { ...metas[idx], resultado: val, cumple: val };
+                                                      return { ...prev, metas };
+                                                    });
+                                                  }}
+                                                />
+                                                <span className={`text-xs font-bold ${meta.resultado ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                                  {meta.resultado ? "Cumple" : "No"}
                                                 </span>
-                                              )}
-
-                                              {/* Over */}
-                                              {meta.permiteOver && (
-                                                <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100 font-semibold shadow-sm">
-                                                  Over
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        <div className="w-32 min-w-[120px]">
-                                          <label className="text-[9px] uppercase font-bold text-slate-400 mb-1 block">Resultado</label>
-                                          {meta.unidad === "Cumple/No Cumple" ? (
-                                            <label className={`flex items-center gap-2 p-1.5 rounded border-2 cursor-pointer transition-all ${meta.resultado ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}>
-                                              <input
-                                                type="checkbox"
-                                                className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
-                                                checked={!!meta.resultado}
-                                                onChange={(e) => {
-                                                  const val = e.target.checked;
-                                                  handleUpdateLocalHito(obj._id, (prev) => {
-                                                    const metas = [...prev.metas];
-                                                    metas[idx] = { ...metas[idx], resultado: val, cumple: val };
-                                                    return { ...prev, metas };
-                                                  });
-                                                }}
-                                              />
-                                              <span className={`text-xs font-bold ${meta.resultado ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                {meta.resultado ? "Cumple" : "No"}
-                                              </span>
-                                            </label>
-                                          ) : (
-                                            <div className="relative">
-                                              <Input
-                                                type="number"
-                                                className="h-8 pl-2 pr-6 text-sm font-semibold border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all text-slate-700"
-                                                placeholder="0.00"
-                                                value={meta.resultado ?? ""}
-                                                onChange={(e) => {
-                                                  const val = e.target.value === "" ? null : Number(e.target.value);
-                                                  handleUpdateLocalHito(obj._id, (prev) => {
-                                                    const metas = [...prev.metas];
-                                                    metas[idx] = { ...metas[idx], resultado: val };
-                                                    return { ...prev, metas };
-                                                  });
-                                                }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {meta.resultado !== null && (
-                                        <div className={`mt-1 flex items-center gap-2 text-[10px] font-medium px-2 py-1.5 rounded border ${cumple ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-rose-50 text-rose-800 border-rose-100'}`}>
-                                          <span className="text-sm">{cumple ? "✔" : "✘"}</span>
-                                          <div className="flex-1">
-                                            {cumple ? "Cumple Obj." : (isAcumulativo ? `Progreso: ${valorEvaluado} / ${meta.esperado}` : "No alcanza")}
-                                            {isAcumulativo && (
-                                              <span className="opacity-80 ml-1">
-                                                (Acumulado: <b>{valorEvaluado}</b>)
-                                              </span>
+                                              </label>
+                                            ) : (
+                                              <div className="relative">
+                                                <Input
+                                                  type="number"
+                                                  className={`h-8 pl-2 pr-6 text-sm font-semibold border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all text-slate-700 ${meta.resultado === null || meta.resultado === "" || meta.resultado === undefined ? "bg-yellow-50" : "bg-white"}`}
+                                                  placeholder="0.00"
+                                                  value={meta.resultado ?? ""}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value === "" ? null : Number(e.target.value);
+                                                    handleUpdateLocalHito(obj._id, (prev) => {
+                                                      const metas = [...prev.metas];
+                                                      metas[idx] = { ...metas[idx], resultado: val };
+                                                      return { ...prev, metas };
+                                                    });
+                                                  }}
+                                                />
+                                              </div>
                                             )}
                                           </div>
                                         </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+
+                                        {meta.resultado !== null && (
+                                          <div className={`mt-1 flex items-center gap-2 text-[10px] font-medium px-2 py-1.5 rounded border ${cumple ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-rose-50 text-rose-800 border-rose-100'}`}>
+                                            <span className="text-sm">{cumple ? "✔" : "✘"}</span>
+                                            <div className="flex-1">
+                                              {cumple ? "Cumple Obj." : (isAcumulativo ? `Progreso: ${valorEvaluado} / ${meta.esperado}` : "No alcanza")}
+                                              {isAcumulativo && (
+                                                <span className="opacity-80 ml-1">
+                                                  (Acumulado: <b>{valorEvaluado}</b>)
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
 
                               {/* Comentarios y Acciones */}
-                              <div className="bg-white p-3 rounded-lg border shadow-sm space-y-3">
-                                <div>
+                              <div className="p-5 bg-slate-50/50">
+                                <div className="mb-3 flex items-center gap-2">
+                                  <MessageSquare className="w-3 h-3 text-slate-400" />
+                                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cierre & Feedback</span>
+                                </div>
+                                <div className="space-y-3">
                                   <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Comentario</label>
                                   <textarea
-                                    className="w-full h-20 rounded border-slate-200 p-2 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none resize-none"
+                                    className={`w-full h-20 rounded border-slate-200 p-2 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none resize-none ${!localHito.comentario ? "bg-yellow-50" : "bg-white"}`}
                                     placeholder="Justificación..."
                                     value={localHito.comentario}
                                     onChange={(e) => handleUpdateLocalHito(obj._id, (prev) => ({ ...prev, comentario: e.target.value }))}
@@ -1059,7 +1215,7 @@ export default function EvaluacionFlujo() {
                                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleRecalculate(obj)} disabled={savingItems[obj._id]}>
                                     <RefreshCw className={`w-3 h-3 mr-1 ${savingItems[obj._id] ? "animate-spin" : ""}`} /> Recalcular
                                   </Button>
-                                  <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => handleSaveItem(obj, "draft")} disabled={savingItems[obj._id]}>
+                                  <Button size="sm" className="h-7 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200" onClick={() => handleSaveItem(obj, "draft")} disabled={savingItems[obj._id]}>
                                     <Save className="w-3 h-3 mr-1" /> Guardar
                                   </Button>
                                 </div>
@@ -1067,13 +1223,14 @@ export default function EvaluacionFlujo() {
 
                               {/* [TESTING] Delete Button */}
                               {isTestingMode && (
-                                <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end">
+                                <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end px-4 pb-4">
                                   <Button
                                     variant="outline"
                                     className="text-rose-600 border-rose-200 hover:bg-rose-50"
                                     onClick={() => handleDeleteEvaluacion(obj, localHito.periodo)}
                                   >
-                                    <Trash2 className="w-4 h-4 mr-2" /> Borrar Evaluación (Testing)
+
+                                    <Trash2 className="w-4 h-4 mr-2" /> Borrar Evaluación (Admin)
                                   </Button>
                                 </div>
                               )}
@@ -1092,7 +1249,7 @@ export default function EvaluacionFlujo() {
               </div>
 
               <div className="space-y-6">
-                <h2 className="text-xl font-semibold flex items-center gap-2 text-amber-700 border-b pb-2">
+                <h2 className="text-xl font-semibold flex items-center gap-2 text-blue-700 border-b pb-2">
                   <Lightbulb className="w-5 h-5" /> Competencias
                 </h2>
                 {dashEmpleadoData?.aptitudes?.map((apt) => {
@@ -1101,20 +1258,20 @@ export default function EvaluacionFlujo() {
                   const localHito = data?.localHito;
 
                   return (
-                    <Card key={apt._id} className={`border-0 shadow-sm ring-1 ring-slate-100 transition-all overflow-hidden mb-4 group ${isExpanded ? 'ring-2 ring-amber-500/20 shadow-md bg-white' : 'hover:shadow-md bg-gradient-to-r from-amber-50/50 to-white hover:to-amber-50/30'}`}>
+                    <Card key={apt._id} className={`border-0 shadow-sm ring-1 ring-slate-100 transition-all overflow-hidden mb-4 group ${isExpanded ? 'ring-2 ring-blue-500/20 shadow-md bg-white' : 'hover:shadow-md bg-white hover:bg-slate-50/50'}`}>
                       <CardHeader className="py-2 px-3 cursor-pointer" onClick={() => toggleExpand(apt)}>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <CardTitle className="text-sm font-bold text-slate-800 leading-tight truncate group-hover:text-amber-700 transition-colors">
-                              {apt.nombre}
-                            </CardTitle>
-                            <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">{apt.descripcion}</p>
+                          <div className="flex-1 min-w-0 flex items-start gap-3">
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-2 shrink-0 whitespace-nowrap mt-0.5">
+                              Competencia
+                            </Badge>
+                            <span className="text-sm font-bold text-slate-700 leading-snug">{apt.nombre}</span>
                           </div>
 
-                          <div className="flex items-center gap-3 shrink-0 bg-amber-50/50 rounded-lg px-2 py-1 border border-amber-100/50">
+                          <div className="flex items-center gap-3 shrink-0 bg-slate-50 rounded-lg px-2 py-1 border border-slate-100">
                             <div className="flex flex-col items-center px-1">
-                              <span className="text-[8px] font-bold text-amber-700/50 uppercase tracking-wider">Score</span>
-                              <span className="text-sm font-black text-amber-600 leading-none">{Math.round(apt.puntuacion)}%</span>
+                              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Score</span>
+                              <span className="text-sm font-black text-slate-700 leading-none">{Math.round(apt.puntuacion)}%</span>
                             </div>
                           </div>
                         </div>
@@ -1128,18 +1285,20 @@ export default function EvaluacionFlujo() {
                               <label className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded inline-block font-bold uppercase mb-2 tracking-wide">Cronograma de Hitos</label>
                               <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-2">
                                 {apt.hitos.map((h) => {
-                                  const status = getHitoStatus(h);
+                                  const status = getSmartHitoStatus(h);
                                   const colorClass = getHitoColorClass(status);
                                   const isSelected = localHito?.periodo === h.periodo;
                                   const isSelectable = status === "vencido" || status === "por_vencer" || status === "evaluado";
+                                  const isLoading = savingItems[apt._id] && !localHito;
 
                                   return (
                                     <div
                                       key={h.periodo}
-                                      onClick={() => isSelectable && loadItemEvaluacion(apt, h.periodo)}
+                                      onClick={() => (isSelectable || (isTestingMode && puedeVer)) && !savingItems[apt._id] && loadItemEvaluacion(apt, h.periodo)}
                                       className={`flex flex-col items-center justify-center py-1.5 px-1 rounded border transition-all duration-200 relative ${colorClass} 
-                                      ${isSelected ? 'ring-2 ring-offset-1 ring-amber-500 shadow-sm scale-105 z-10' : ''} 
-                                      ${isSelectable ? 'cursor-pointer hover:shadow-sm hover:-translate-y-0.5' : 'opacity-40 grayscale cursor-not-allowed'}`}
+                                      ${isSelected ? 'ring-2 ring-offset-1 ring-blue-500 shadow-sm scale-105 z-10' : ''}   
+                                      ${(isSelectable || (isTestingMode && puedeVer)) && !savingItems[apt._id] ? 'cursor-pointer hover:shadow-sm hover:-translate-y-0.5' : 'opacity-40 grayscale cursor-not-allowed'}
+                                      ${isLoading && isSelected ? 'animate-pulse' : ''}`}
                                     >
                                       <span className="text-[9px] font-black uppercase tracking-tight">{h.periodo}</span>
                                       <span className="text-[10px] font-semibold mt-0">{h.actual !== null ? `${Math.round(h.actual)}%` : "-"}</span>
@@ -1147,31 +1306,55 @@ export default function EvaluacionFlujo() {
                                   );
                                 })}
                               </div>
+
+                              {/* Legend */}
+                              <div className="flex items-center gap-3 mt-2 justify-end">
+                                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-emerald-100 border border-emerald-200"></div><span className="text-[9px] text-slate-400 font-medium">Evaluado</span></div>
+                                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-amber-100 border border-amber-200"></div><span className="text-[9px] text-slate-400 font-medium">Por Vencer</span></div>
+                                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-rose-100 border border-rose-200"></div><span className="text-[9px] text-slate-400 font-medium">Vencido</span></div>
+                                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-50 border border-blue-200"></div><span className="text-[9px] text-slate-400 font-medium">Futuro</span></div>
+                              </div>
                             </div>
+
                           )}
 
                           {localHito ? (
                             <div className="space-y-4 mt-4 animate-in slide-in-from-top-4 duration-300">
                               {/* Evaluation Header */}
-                              <div className={`flex items-center justify-between p-2.5 rounded-lg shadow-sm border ${isTestingMode
-                                ? "bg-indigo-50 border-indigo-100 text-indigo-900"
-                                : "bg-amber-50 border-amber-100 text-amber-900"
+                              <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl shadow-sm border mb-6 ${isTestingMode
+                                ? "bg-gradient-to-br from-indigo-50 to-white text-slate-800 border-indigo-100 shadow-indigo-100"
+                                : "bg-white border-slate-200 shadow-sm"
                                 }`}>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-xs font-medium ${isTestingMode ? "text-indigo-400" : "text-amber-700"}`}>Período:</span>
-                                  <Badge className={`text-xs px-2 py-0.5 ${isTestingMode
-                                    ? "bg-white text-indigo-600 border-indigo-200"
-                                    : "bg-white text-amber-800 border-amber-200 shadow-sm"
-                                    }`}>{localHito.periodo}</Badge>
+                                <div className="flex-1 min-w-0 pr-4">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-200 text-[9px] px-2">
+                                      Competencia
+                                    </Badge>
+                                    <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{localHito.periodo}</span>
+                                  </div>
+                                  {apt.descripcion ? (
+                                    <div className="text-sm text-slate-600 leading-relaxed border-l-2 border-slate-200 pl-3">
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Descripción</span>
+                                      {apt.descripcion}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-slate-400 italic">Sin descripción</p>
+                                  )}
                                 </div>
-                                <div className={`flex items-center gap-2 px-3 py-1 rounded border ${isTestingMode
+
+                                <div className={`flex items-center gap-3 pl-6 pr-6 py-3 rounded-xl border backdrop-blur-sm self-stretch sm:self-auto flex-col sm:flex-row justify-center min-w-[140px] ${isTestingMode
                                   ? "bg-white/50 border-indigo-100"
-                                  : "bg-white border-amber-200/50"
+                                  : "bg-slate-50 border-slate-100"
                                   }`}>
-                                  <span className={`text-[10px] font-medium uppercase tracking-wider ${isTestingMode ? "text-indigo-400" : "text-amber-600/70"}`}>Nivel</span>
-                                  <span className={`text-lg font-black ${isTestingMode ? "text-indigo-700" : "text-amber-700"}`}>
-                                    {localHito.escala ? `${localHito.escala}/5` : "-"}
-                                  </span>
+                                  <div className="text-center sm:text-right">
+                                    <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isTestingMode ? "text-indigo-400" : "text-slate-500"}`}>Nivel</div>
+                                    <div className={`text-3xl font-black ${Number(localHito.actual) >= 100
+                                      ? "text-emerald-500"
+                                      : isTestingMode ? "text-indigo-600" : "text-slate-800"
+                                      }`}>
+                                      {localHito.escala ? `${localHito.escala}/5` : "-"}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
 
@@ -1186,10 +1369,10 @@ export default function EvaluacionFlujo() {
                                       <button
                                         key={val}
                                         onClick={() => handleUpdateLocalHito(apt._id, (prev) => ({ ...prev, escala: val }))}
-                                        className={`h-9 rounded-lg border-2 font-black text-lg transition-all duration-200 relative overflow-hidden group/btn ${localHito.escala === val ? "border-amber-500 bg-amber-50 text-amber-600 shadow-sm ring-1 ring-amber-200 ring-offset-1" : "border-slate-100 bg-white text-slate-300 hover:border-amber-200 hover:text-amber-400"}`}
+                                        className={`h-9 rounded-lg border-2 font-black text-lg transition-all duration-200 relative overflow-hidden group/btn ${localHito.escala === val ? "border-blue-500 bg-blue-50 text-blue-600 shadow-sm ring-1 ring-blue-200 ring-offset-1" : "border-slate-100 bg-white text-slate-300 hover:border-blue-200 hover:text-blue-400"}`}
                                       >
                                         <span className="relative z-10">{val}</span>
-                                        {localHito.escala === val && <div className="absolute inset-0 bg-amber-100/50 animate-pulse"></div>}
+                                        {localHito.escala === val && <div className="absolute inset-0 bg-blue-100/50 animate-pulse"></div>}
                                       </button>
                                     ))}
                                   </div>
@@ -1202,7 +1385,7 @@ export default function EvaluacionFlujo() {
                                 <div className="border-t border-slate-100 pt-3">
                                   <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Comentario</label>
                                   <textarea
-                                    className="w-full h-20 rounded-lg border-slate-200 bg-slate-50 p-2 text-xs focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition-all outline-none resize-none placeholder:text-slate-400"
+                                    className={`w-full h-20 rounded-lg border-slate-200 p-2 text-xs focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none placeholder:text-slate-400 ${!localHito.comentario ? "bg-yellow-50" : "bg-white"}`}
                                     placeholder="Justifica..."
                                     value={localHito.comentario}
                                     onChange={(e) => handleUpdateLocalHito(apt._id, (prev) => ({ ...prev, comentario: e.target.value }))}
@@ -1210,7 +1393,7 @@ export default function EvaluacionFlujo() {
                                 </div>
 
                                 <div className="flex justify-end pt-1">
-                                  <Button size="sm" className="h-8 bg-amber-600 hover:bg-amber-700 text-white shadow-sm shadow-amber-200" onClick={() => handleSaveItem(apt, "draft")} disabled={savingItems[apt._id]}>
+                                  <Button size="sm" className="h-8 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 shadow-sm" onClick={() => handleSaveItem(apt, "draft")} disabled={savingItems[apt._id]}>
                                     <Save className="w-3 h-3 mr-1" /> Guardar
                                   </Button>
                                 </div>
@@ -1223,13 +1406,15 @@ export default function EvaluacionFlujo() {
                             </div>
                           )}
                         </CardContent>
-                      )}
+                      )
+                      }
                     </Card>
                   );
                 })}
               </div>
             </div>
-          )}
+          )
+          }
 
           {/* TAB: FEEDBACK */}
           {activeTab === "feedback" && (
@@ -1356,6 +1541,7 @@ export default function EvaluacionFlujo() {
 
                   const statusInfo = getFeedStatus();
                   const localFbData = fb || { comentario: "", estado: "DRAFT" };
+                  const isLoading = loadingFeedbacks; // Use general loading state or specialized?
 
 
                   // Función local para calcular breakdown del periodo
@@ -1707,6 +1893,15 @@ export default function EvaluacionFlujo() {
           }
         </div>
       </div>
+
+      {/* Reporte Final Modal */}
+      <ReporteFinal
+        isOpen={showFinalReport}
+        onClose={() => setShowFinalReport(false)}
+        data={dashEmpleadoData}
+        empleado={dashEmpleadoData?.empleado}
+        anio={anio}
+      />
     </div>
   );
 }

@@ -23,6 +23,7 @@ export default function FormularioObjetivos({
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [proceso, setProceso] = useState("");
+  const [estado, setEstado] = useState("");
   const [year, setYear] = useState(initialYear || currentYear);
   const [scopeType, setScopeType] = useState(initialScopeType || "area");
   const [scopeId, setScopeId] = useState(initialScopeId || "");
@@ -68,6 +69,9 @@ export default function FormularioObjetivos({
     setNombre(initialData.nombre || "");
     setDescripcion(initialData.descripcion || "");
     setProceso(initialData.proceso || "");
+    setEstado(initialData.activo ? "Activo" : "Inactivo");
+   
+
     setYear(initialData.year || currentYear);
 
     const apiScope = initialData.scopeType || "area";
@@ -272,11 +276,12 @@ export default function FormularioObjetivos({
       nombre,
       descripcion,
       proceso,
+
       frecuencia,
       modoAcumulacion,
       acumulativo: modoAcumulacion === "acumulativo",
       pesoBase: Number(peso || 0),
-      activo: true,
+      activo: estado === "Activo",
     };
 
     if (usarFechaCierreCustom && fechaCierre) {
@@ -343,6 +348,17 @@ export default function FormularioObjetivos({
     { value: "Organizacional", label: "Organizacional" },
   ];
 
+  const ESTADO = [
+    { value: "", label: "Selecciona un estado…" },
+    { value: "Activo", label: "Activo" },
+    { value: "Inactivo", label: "Inactivo" },
+
+  ];
+
+
+
+
+
   return (
     <form onSubmit={(e) => handleSubmit(e)} className="flex flex-col h-full">
       {/* Contenido Scrollable */}
@@ -382,7 +398,24 @@ export default function FormularioObjetivos({
                 ))}
               </select>
               <FieldError name="proceso" />
+
+              <label className="text-xs">Estado</label>
+              <select
+                className={inputCls}
+                value={estado}
+                onChange={(a) => setEstado(a.target.value)}
+                required
+              >
+                {ESTADO.map((p) => (
+                  <option key={p.value || "blank"} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <FieldError name="estado" />
             </div>
+
+
 
             <div className="grid grid-cols-2 gap-3">
               <div>

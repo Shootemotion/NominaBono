@@ -121,7 +121,7 @@ export const updateHito = async (req, res) => {
     );
 
     const baseUpdate = {
-      year: Number(String(periodo).slice(0, 4)),
+      year: (req.body.year && !isNaN(req.body.year)) ? Number(req.body.year) : Number(String(periodo).slice(0, 4)),
       periodo,
       actual: scoreObjetivo !== null ? scoreObjetivo : (req.body.actual ?? null),
       escala: req.body.escala,

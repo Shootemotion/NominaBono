@@ -199,7 +199,12 @@ export default function SeguimientoReferente() {
         let rawResponses = [];
 
         // 1. Recolectar respuestas crudas según rol
-        if (esReferente) {
+        if (esDirector || esSuperAdmin) {
+          // Director/RRHH/SuperAdmin: Traer TODO de una sola vez
+          // dashArea(null) en el backend ya está optimizado para traer todos los empleados
+          const allData = await dashArea(null, anio);
+          rawResponses = Array.isArray(allData) ? allData : [];
+        } else if (esReferente) {
           const promises = [];
 
           // Hybrid Logic:
@@ -216,11 +221,6 @@ export default function SeguimientoReferente() {
 
           const results = await Promise.all(promises);
           rawResponses = results.flat();
-        } else if (esDirector) {
-          // Director/RRHH: Traer TODO de una sola vez
-          // dashArea(null) en el backend ya está optimizado para traer todos los empleados
-          const allData = await dashArea(null, anio);
-          rawResponses = Array.isArray(allData) ? allData : [];
         } else if (esVisor && user?.empleado?._id) {
           const resp = await api(
             `/dashboard/empleado/${user.empleado._id}?year=${anio}`

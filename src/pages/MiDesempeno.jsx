@@ -15,7 +15,7 @@ import {
   Target,
   Lightbulb,
   ChevronDown,
-
+  HelpCircle,
   ChevronUp,
   ChevronLeft,
   ChevronRight,
@@ -31,8 +31,10 @@ import {
   Handshake,
   TrendingUp,
   BarChart3,
-  Hourglass
+  Hourglass,
+  Trophy
 } from "lucide-react";
+import { ReporteFinal } from "@/components/ReporteFinal";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Legend, AreaChart, Area } from "recharts";
 
 // === UI helpers ===
@@ -289,6 +291,7 @@ export default function MiDesempeno() {
   const [selectedItemId, setSelectedItemId] = useState(null);
   const [viewPeriod, setViewPeriod] = useState(null); // For chart interaction
   const [showGraph, setShowGraph] = useState(false); // Collapsible graph state
+  const [showFinalReport, setShowFinalReport] = useState(false);
 
   // Year Selection Logic
   const [selectedYear, setSelectedYear] = useState(() => {
@@ -417,6 +420,8 @@ export default function MiDesempeno() {
     // Objetivos
     let totalObjScore = 0;
     let totalObjWeight = 0;
+    let maxActiveObjWeight = 0;
+    const timeFraction = Math.min(feedbackLimit / 12, 1);
     const objetivos = [];
 
     data.objetivos?.forEach(obj => {
@@ -439,6 +444,9 @@ export default function MiDesempeno() {
         score = isCumulative
           ? Math.max(...progresos, 0)
           : Math.round(progresos.reduce((a, b) => a + b, 0) / progresos.length);
+
+        const potentialFactor = isCumulative ? timeFraction : 1;
+        maxActiveObjWeight += (obj.peso || 0) * potentialFactor;
       }
 
       const hasPermiteOver = obj.metas?.some(m => m.permiteOver) || obj.hitos?.some(h => h.metas?.some(m => m.permiteOver));
@@ -495,6 +503,14 @@ export default function MiDesempeno() {
     const displayComp = scoreComp;
     const displayGlobal = global;
 
+    // Calculate Max Possible (Context for user)
+    // For Objectives: Sum of weights of ACTIVE objectives * 70 (Max Contribution) / 100 (Total Weight Base)
+    // For Competencies: If there are ANY active competencies, Max is 30 (since it's an average).
+    // For Objectives: Sum of weights of ACTIVE objectives * 70 (Max Contribution) / 100 (Total Weight Base)
+    // For Cumulative objectives, Max Contribution is weighted by time passed (e.g. Q1 = 25% of annual).
+    const maxObj = (maxActiveObjWeight / 100) * 70;
+    const maxComp = compCount > 0 ? 30 : 0; // Fixed 30% potential if any data exists
+
     return {
       objetivos,
       aptitudes,
@@ -502,6 +518,11 @@ export default function MiDesempeno() {
         obj: displayObj,
         comp: displayComp,
         global: displayGlobal
+      },
+      maxScores: {
+        obj: maxObj,
+        comp: maxComp,
+        global: maxObj + maxComp
       },
       sparklineData: (() => {
         // Generate historical data for sparklines
@@ -1031,6 +1052,21 @@ export default function MiDesempeno() {
               <p className="text-slate-400 text-lg">Seguimiento de evaluaciones y feedback continuo</p>
             </div>
             <div className="hidden md:block text-right">
+
+              {/* REPORT BUTTON */}
+              {(feedbacks.some(f => f.periodo === "FINAL") || data?.evaluaciones?.some(e => e.periodo === "FINAL")) && (
+                <div className="mb-4">
+                  <Button
+                    size="sm"
+                    className="bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-lg backdrop-blur-sm"
+                    onClick={() => setShowFinalReport(true)}
+                  >
+                    <Trophy className="w-4 h-4 mr-2 text-yellow-300" />
+                    Ver Reporte Final
+                  </Button>
+                </div>
+              )}
+
               <div className="text-sm text-slate-400 uppercase tracking-wider font-medium mb-1">Año de Desempeño</div>
               <div className="flex items-center justify-end gap-3 text-white">
                 <button
@@ -1234,102 +1270,151 @@ export default function MiDesempeno() {
 
                           return (
                             <>
-                              {/* Objectives Tile */}
-                              <div className="bg-indigo-50/40 rounded-xl border border-indigo-100 shadow-sm p-4 flex flex-col items-center relative overflow-hidden group hover:shadow-md transition-all">
-                                <div className="w-full flex justify-between items-center mb-1 border-b border-indigo-100 pb-2">
-                                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Objetivos</span>
-                                  <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200 text-[10px] font-semibold hover:bg-indigo-200">70%</Badge>
+                              {/* Objectives Tile (Modern Violet) */}
+                              <div className="relative bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col justify-between overflow-visible group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                                {/* Custom Tooltip */}
+                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                                  Suma de pesos de objetivos iniciados
+                                  <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
                                 </div>
 
-                                <div className="flex w-full items-end justify-between">
-                                  <div className="flex flex-col">
-                                    <div className={`text-3xl font-bold ${showScores ? "text-indigo-900" : "text-indigo-300"}`}>
-                                      {showScores ? `${Math.round(periodResults.scores.obj)}%` : "--"}
+                                <div className="flex justify-between items-start mb-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-violet-50 rounded-lg text-violet-600">
+                                      <Target className="w-4 h-4" />
                                     </div>
-                                    <span className="text-[10px] text-indigo-400 font-medium mt-1">
-                                      Progreso Real: <span className="font-bold text-indigo-700">{showScores ? `${Math.round(periodResults.scores.obj / 0.7)}%` : "--"}</span>
+                                    <div>
+                                      <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Objetivos</h3>
+                                      <span className="text-[10px] text-slate-400 font-medium">Peso: 70%</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-3xl font-black text-slate-800 tracking-tight">
+                                      {showScores ? `${Number(periodResults.scores.obj).toFixed(1)}%` : "--"}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                                      Max Posible {selectedFeedback.periodo}: <span className="font-bold text-violet-600">{showScores ? `${Number(periodResults.maxScores?.obj ?? 70).toFixed(1)}%` : "--"}</span>
                                     </span>
                                   </div>
-                                  <div className="h-16 w-32 opacity-80">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <AreaChart data={periodResults.sparklineData}>
-                                        <XAxis dataKey="name" hide={false} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#6366f1' }} interval={0} padding={{ left: 10, right: 10 }} />
-                                        <Tooltip
-                                          contentStyle={{ background: '#fff', border: '1px solid #e0e7ff', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                                          itemStyle={{ color: '#4338ca', fontWeight: 600 }}
-                                          labelStyle={{ display: 'none' }}
-                                          formatter={(value) => [`${Math.round(value)}%`, '']}
-                                        />
-                                        <Area type="monotone" dataKey="obj" stroke="#6366f1" fill="#818cf8" fillOpacity={0.3} strokeWidth={2} />
-                                      </AreaChart>
-                                    </ResponsiveContainer>
+                                  {/* Progress Bar: Score relative to Max */}
+                                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-violet-500 rounded-full transition-all duration-1000 ease-out"
+                                      style={{ width: `${Math.min(((periodResults.scores.obj || 0) / (periodResults.maxScores?.obj || 1)) * 100, 100)}%` }}
+                                    ></div>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Competencies Tile */}
-                              <div className="bg-orange-50/40 rounded-xl border border-orange-100 shadow-sm p-4 flex flex-col items-center relative overflow-hidden group hover:shadow-md transition-all">
-                                <div className="w-full flex justify-between items-center mb-1 border-b border-orange-100 pb-2">
-                                  <span className="text-[10px] font-bold text-orange-400 uppercase tracking-wider">Competencias</span>
-                                  <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-[10px] font-semibold hover:bg-orange-200">30%</Badge>
+                              {/* Competencies Tile (Modern Teal) */}
+                              <div className="relative bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col justify-between overflow-visible group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                                {/* Custom Tooltip */}
+                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                                  Competencias evaluadas hasta la fecha
+                                  <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
                                 </div>
 
-                                <div className="flex w-full items-end justify-between">
-                                  <div className="flex flex-col">
-                                    <div className={`text-3xl font-bold ${showScores ? "text-orange-900" : "text-orange-300"}`}>
-                                      {showScores ? `${Math.round(periodResults.scores.comp)}%` : "--"}
+                                <div className="flex justify-between items-start mb-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-teal-50 rounded-lg text-teal-600">
+                                      <Lightbulb className="w-4 h-4" />
                                     </div>
-                                    <span className="text-[10px] text-orange-400 font-medium mt-1">
-                                      Promedio: <span className="font-bold text-orange-700">{showScores ? `${Math.round(periodResults.scores.comp / 0.3)}%` : "--"}</span>
+                                    <div>
+                                      <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Competencias</h3>
+                                      <span className="text-[10px] text-slate-400 font-medium">Peso: 30%</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-3xl font-black text-slate-800 tracking-tight">
+                                      {showScores ? `${Number(periodResults.scores.comp).toFixed(1)}%` : "--"}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                                      Max Posible {selectedFeedback.periodo}: <span className="font-bold text-teal-600">{showScores ? `${Number(periodResults.maxScores?.comp ?? 30).toFixed(1)}%` : "--"}</span>
                                     </span>
                                   </div>
-                                  <div className="h-16 w-32 opacity-80">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <AreaChart data={periodResults.sparklineData}>
-                                        <XAxis dataKey="name" hide={false} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#f97316' }} interval={0} padding={{ left: 10, right: 10 }} />
-                                        <Tooltip
-                                          contentStyle={{ background: '#fff', border: '1px solid #ffedd5', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                                          itemStyle={{ color: '#c2410c', fontWeight: 600 }}
-                                          labelStyle={{ display: 'none' }}
-                                          formatter={(value) => [`${Math.round(value)}%`, '']}
-                                        />
-                                        <Area type="monotone" dataKey="comp" stroke="#f97316" fill="#fb923c" fillOpacity={0.3} strokeWidth={2} />
-                                      </AreaChart>
-                                    </ResponsiveContainer>
+                                  {/* Progress Bar */}
+                                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-teal-500 rounded-full transition-all duration-1000 ease-out"
+                                      style={{ width: `${Math.min(((periodResults.scores.comp || 0) / (periodResults.maxScores?.comp || 1)) * 100, 100)}%` }}
+                                    ></div>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Global Tile (Royal Blue) */}
-                              <div className="bg-gradient-to-br from-blue-700 to-slate-900 rounded-xl border border-blue-600/30 shadow-lg p-4 flex flex-col items-center relative overflow-hidden text-white group">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500 rounded-full blur-3xl opacity-20 translate-x-12 -translate-y-12"></div>
+                              {/* Global Tile (Titanium Dark) */}
+                              <div className="relative bg-slate-900 rounded-2xl border border-slate-700 shadow-xl p-5 flex flex-col justify-between overflow-visible group hover:-translate-y-1 transition-all duration-300">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
 
-                                <div className="w-full flex justify-between items-center mb-1 border-b border-white/10 pb-2 relative z-10">
-                                  <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider">Global</span>
-                                  <span className="text-[9px] text-blue-300 font-medium">Final</span>
+                                {/* Custom Tooltip */}
+                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white text-slate-900 font-bold text-[10px] py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                                  Nota Final Ponderada
+                                  <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-white rotate-45"></div>
                                 </div>
 
-                                <div className="flex w-full items-end justify-between relative z-10">
-                                  <div className="flex flex-col">
-                                    <div className="text-4xl font-bold tracking-tight text-white drop-shadow-sm">
-                                      {showScores ? `${Math.round(periodResults.scores.global)}%` : "--"}
+                                <div className="flex justify-between items-start mb-4 relative z-10">
+                                  <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-slate-800 rounded-lg text-blue-400">
+                                      <LayoutDashboard className="w-4 h-4" />
                                     </div>
-                                    <span className="text-[10px] text-blue-300 font-medium mt-1">Desempeño Total</span>
+                                    <div>
+                                      <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wide">Global</h3>
+                                      <span className="text-[10px] text-slate-500 font-medium">Final</span>
+                                    </div>
                                   </div>
-                                  <div className="h-16 w-32 opacity-90">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <AreaChart data={periodResults.sparklineData}>
-                                        <XAxis dataKey="name" hide={false} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#bfdbfe' }} interval={0} padding={{ left: 10, right: 10 }} />
-                                        <Tooltip
-                                          contentStyle={{ background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}
-                                          itemStyle={{ color: '#fff', fontWeight: 600 }}
-                                          labelStyle={{ display: 'none' }}
-                                          formatter={(value) => [`${Math.round(value)}%`, '']}
-                                        />
-                                        <Area type="monotone" dataKey="global" stroke="#60a5fa" fill="#93c5fd" fillOpacity={0.4} strokeWidth={2} />
-                                      </AreaChart>
-                                    </ResponsiveContainer>
+                                  <div className="text-right">
+                                    <div className="text-3xl font-black text-white tracking-tight">
+                                      {showScores ? `${Number(periodResults.scores.global).toFixed(1)}%` : "--"}
+                                    </div>
+                                    {/* Achievement Badge */}
+                                    {showScores && periodResults.scores.global >= 50 && (
+                                      <div className="inline-flex items-center bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 mt-1 uppercase tracking-wider backdrop-blur-sm">
+                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Objetivos Logrados
+                                      </div>
+                                    )}
                                   </div>
+                                </div>
+
+                                <div className="space-y-2 relative z-10">
+                                  <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-slate-400 font-medium bg-slate-800/50 px-2 py-0.5 rounded-md border border-slate-700">
+                                      Max Posible {selectedFeedback.periodo}: <span className="font-bold text-blue-400">{showScores ? `${Number((periodResults.maxScores?.obj ?? 70) + (periodResults.maxScores?.comp ?? 30)).toFixed(1)}%` : "--"}</span>
+                                    </span>
+                                  </div>
+
+                                  {/* Progress Bar with 50% Marker */}
+                                  <div className="relative h-1.5 w-full bg-slate-800 rounded-full mt-2">
+                                    {/* 50% Marker */}
+                                    {(() => {
+                                      const max = (periodResults.maxScores?.obj ?? 70) + (periodResults.maxScores?.comp ?? 30) || 100;
+                                      const pos = (50 / max) * 100;
+                                      if (pos <= 100) return (
+                                        <>
+                                          <div className="absolute top-[-4px] w-0.5 h-3.5 bg-slate-400 z-20 shadow-sm" style={{ left: `${pos}%` }}></div>
+                                          <div className="absolute bottom-[-14px] text-[8px] font-bold text-slate-500 -translate-x-1/2 whitespace-nowrap" style={{ left: `${pos}%` }}>Min 50%</div>
+                                        </>
+                                      );
+                                      return null;
+                                    })()}
+
+                                    <div
+                                      className="absolute top-0 left-0 h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)] z-10"
+                                      style={{ width: `${Math.min(((periodResults.scores.global || 0) / ((periodResults.maxScores?.obj ?? 70) + (periodResults.maxScores?.comp ?? 30) || 1)) * 100, 100)}%` }}
+                                    ></div>
+                                  </div>
+
+                                  {/* Spacer for legend */}
+                                  <div className="h-2"></div>
                                 </div>
                               </div>
                             </>
@@ -1390,10 +1475,20 @@ export default function MiDesempeno() {
                                   </div>
                                 </div>
 
-                                {/* Dual Progress Footer (Tinted) */}
-                                <div className={`px-3 py-2 flex justify-between text-[10px] font-medium ${selectedItemId === obj._id ? 'bg-indigo-50/50 text-indigo-700' : 'bg-slate-50 text-slate-500'}`}>
-                                  <span>Pond: <span className="font-bold">{Math.round((obj.scorePeriodo * obj.peso) / 100)}%</span></span>
-                                  <span>Real: <span className="font-bold">{Math.round(obj.rawScore ?? 0)}%</span></span>
+                                {/* Detailed Metrics Footer */}
+                                <div className={`px-3 py-2 grid grid-cols-3 gap-1 text-[10px] font-medium border-t ${selectedItemId === obj._id ? 'bg-indigo-50/50 text-indigo-700 border-indigo-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] opacity-70">Peso</span>
+                                    <span className="font-bold">{obj.peso}%</span>
+                                  </div>
+                                  <div className="flex flex-col text-center border-l border-slate-200/50">
+                                    <span className="text-[9px] opacity-70">Pond</span>
+                                    <span className="font-bold">{Number((obj.scorePeriodo * (obj.peso || 0)) / 100).toFixed(1)}%</span>
+                                  </div>
+                                  <div className="flex flex-col text-right border-l border-slate-200/50">
+                                    <span className="text-[9px] opacity-70">Avance</span>
+                                    <span className="font-bold">{Number(obj.rawScore ?? 0).toFixed(1)}%</span>
+                                  </div>
                                 </div>
                               </button>
                             ))
@@ -1420,7 +1515,7 @@ export default function MiDesempeno() {
                                 {/* Dual Progress Footer (Tinted) */}
                                 <div className={`px-3 py-2 flex justify-between text-[10px] font-medium ${selectedItemId === apt._id ? 'bg-orange-50/50 text-orange-700' : 'bg-slate-50 text-slate-500'}`}>
                                   <span>Impacto: <span className="font-bold">30%</span></span>
-                                  <span>Calif: <span className="font-bold">{Math.round(apt.scorePeriodo)}%</span></span>
+                                  <span>Calif: <span className="font-bold">{Number(apt.scorePeriodo).toFixed(1)}%</span></span>
                                 </div>
                               </button>
                             ))
@@ -1567,6 +1662,17 @@ export default function MiDesempeno() {
           </div>
         )}
       </div>
+      {/* Reporte Final Modal */}
+      {/* Reporte Final Modal */}
+      <ReporteFinal
+        isOpen={showFinalReport}
+        onClose={() => setShowFinalReport(false)}
+        data={data}
+        empleado={data?.empleado}
+        anio={selectedYear}
+        scoreGlobal={periodResults?.sparklineData?.find(d => d.name === "Fin")?.global ?? 0}
+        evolutionData={periodResults?.sparklineData || []}
+      />
     </div>
   );
 }
