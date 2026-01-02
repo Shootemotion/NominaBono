@@ -2,6 +2,8 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Usuario from '../models/Usuario.model.js';
+import Area from '../models/Area.model.js';
+import Sector from '../models/Sector.model.js';
 import crypto from 'crypto';
 
 // helper: devuelve usuario sin passwordHash ni campos sensibles
@@ -11,8 +13,13 @@ const safeUser = (u) => {
   return o;
 };
 
-const signJwt = (user) => {
-  const payload = { sub: user._id.toString(), rol: user.rol };
+const signJwt = (user, refAreas = [], refSectors = []) => {
+  const payload = {
+    sub: user._id.toString(),
+    rol: user.rol,
+    refAreas,
+    refSectors
+  };
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
 };
 
@@ -190,7 +197,22 @@ export const login = async (req, res, next) => {
       return res.status(409).json({ code: 'PASSWORD_CHANGE_REQUIRED', message: 'Debés cambiar la contraseña' });
     }
 
-    const token = signJwt(user);
+    // --- Optimization: Pre-fetch Referente Status ---
+    let refAreas = [];
+    let refSectors = [];
+    if (user.empleado) {
+      try {
+        const empId = user.empleado; // ID
+        const areas = await Area.find({ referentes: empId }, '_id').lean();
+        const sectors = await Sector.find({ referentes: empId }, '_id').lean();
+        refAreas = areas.map(a => a._id.toString());
+        refSectors = sectors.map(s => s._id.toString());
+      } catch (err) {
+        console.error('Error fetching referentes in login:', err);
+      }
+    }
+
+    const token = signJwt(user, refAreas, refSectors);
     res.json({
       accessToken: token,
       user: {
@@ -208,7 +230,7 @@ export const login = async (req, res, next) => {
 export async function resetSuperadmin(req, res, next) {
   try {
     const token = req.headers['x-setup-token'] || req.query.token;
-   
+
     if (!token || token !== process.env.ADMIN_SETUP_TOKEN) {
       return res.status(403).json({ message: 'No autorizado' });
     }

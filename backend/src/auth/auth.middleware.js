@@ -89,22 +89,18 @@ export const authenticateJWT = async (req, res, next) => {
       const sectorId = userDoc.empleado?.sector?._id ? String(userDoc.empleado.sector._id)
         : userDoc.empleado?.sector ? String(userDoc.empleado.sector) : null;
 
-      // Calcular referentes (castear a ObjectId siempre)
-      let referenteAreas = [];
-      let referenteSectors = [];
-      if (empleadoId) {
-        try {
-          const empObjId = new mongoose.Types.ObjectId(empleadoId);
+      // Calcular referentes (CACHEADO EN JWT cuando sea posible)
+      let referenteAreas = payload.refAreas || [];
+      let referenteSectors = payload.refSectors || [];
 
-          const ares = await Area.find({ referentes: empObjId }, "_id").lean();
-          const secs = await Sector.find({ referentes: empObjId }, "_id").lean();
+      // Fallback: Si el token es viejo (no tiene campos), podríamos consultar DB?
+      // Por consistencia y rendimiento, mejor asumimos vacío o consultamos SOLO si faltan y es crítico.
+      // Versión optimizada: Confiamos en el token. El usuario debe reloguear si cambia.
+      // Si el payload NO tiene las keys, es un token viejo => array vacío.
 
-          referenteAreas = (ares || []).map(a => String(a._id));
-          referenteSectors = (secs || []).map(s => String(s._id));
-        } catch (err) {
-          console.error("Error fetching referentes for user:", err);
-        }
-      }
+      // Asegurar que son strings
+      if (Array.isArray(referenteAreas)) referenteAreas = referenteAreas.map(String);
+      if (Array.isArray(referenteSectors)) referenteSectors = referenteSectors.map(String);
 
       // 🔹 Extender permisos si es referente
       if (referenteAreas.length > 0 || referenteSectors.length > 0) {
@@ -157,26 +153,8 @@ export const authenticateJWT = async (req, res, next) => {
       return next();
     }
 
-    // Anónimo → visor
-    req.user = {
-      _id: "anon",
-      email: null,
-      rol: "visor",
-      rolEfectivo: "visor",
-      permisos: roleCaps.visor,
-      empleadoId: null,
-      areaId: null,
-      sectorId: null,
-      fullName: null,
-      isSuper: false,
-      isRRHH: false,
-      isDirectivo: false,
-      isJefeArea: false,
-      isJefeSector: false,
-      referenteAreas: [],
-      referenteSectors: []
-    };
-    return next();
+    // Si no hay token, rechazamos
+    return res.status(401).json({ message: "No autenticado (Token requerido)" });
   } catch (err) {
     console.error("authenticateJWT error:", err.message || err);
     return res.status(401).json({ message: "Token inválido o expirado" });
