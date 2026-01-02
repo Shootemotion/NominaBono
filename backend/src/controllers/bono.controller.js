@@ -38,65 +38,67 @@ export const saveConfig = async (req, res, next) => {
 export const calculateAll = async (req, res, next) => {
     try {
         const { year } = req.params;
-        const { targetId, type } = req.query; // Support targeted recalc
+        const { targetId, type } = req.query; // Support targeted recalc, though now it's fast anyway
         const anio = Number(year);
 
         // 1. Get Config
         const config = await BonoConfig.findOne({ anio });
         if (!config) return res.status(400).json({ message: "No hay configuración para este año." });
 
-        // 2. Get Active Employees
-        const filter = {};
-        // If targetId is provided, filter query
-        if (targetId) {
-            if (type === 'empleado') {
-                filter._id = targetId;
-            } else if (type === 'area') {
-                filter.area = targetId;
-            }
+        // 2. Determine Scope (Employees with FINAL Feedback logic)
+        const feedbackFilter = {
+            year: anio,
+            periodo: "FINAL",
+            estado: { $in: ["SENT", "PENDING_HR", "CLOSED", "ACKNOWLEDGED"] }
+        };
+
+        // Optimization: Filter at feedback level if possible
+        if (targetId && type === 'empleado') {
+            feedbackFilter.empleado = targetId;
         }
 
-        const empleados = await Empleado.find(filter).populate("area").populate("sector");
+        const feedbacks = await Feedback.find(feedbackFilter, 'empleado updatedAt').lean();
+        let empIds = feedbacks.map(f => f.empleado.toString());
 
-        const results = [];
-        const debugs = []; // Store simplified debug info for response
+        // Area Filter (if applicable)
+        if (targetId && type === 'area') {
+            const areaEmps = await Empleado.find({ area: targetId }, '_id').lean();
+            const areaEmpSet = new Set(areaEmps.map(e => e._id.toString()));
+            empIds = empIds.filter(id => areaEmpSet.has(id));
+        }
 
-        for (const emp of empleados) {
-            // 3. Get FINAL Feedback
-            const feedback = await Feedback.findOne({
-                empleado: emp._id,
-                year: anio,
-                periodo: "FINAL",
-                estado: { $in: ["SENT", "PENDING_HR", "CLOSED", "ACKNOWLEDGED"] } // Debe estar al menos enviado
-            });
+        // De-duplicate IDs just in case
+        empIds = [...new Set(empIds)];
 
-            // Si no hay feedback final, no calculamos (o calculamos 0)
-            if (!feedback) {
-                if (targetId) debugs.push(`${emp.apellido}: Sin Feedback FINAL`);
-                continue;
-            }
+        if (empIds.length === 0) {
+            return res.json({ count: 0, message: "No se encontraron empleados con feedback final para calcular." });
+        }
 
-            // 4. Calculate Scores
-            // Usamos la lógica centralizada del dashboard
-            const [metrics] = await computeForEmployees([emp._id], anio);
+        // 3. Compute Metrics Bulk (Heavy Lifting done efficiently)
+        // This function internally does bulk queries for all provided IDs
+        const metrics = await computeForEmployees(empIds, anio);
 
-            // metrics tiene: { scoreObj, scoreApt, scoreFinal, ... }
-            // Nota: computeForEmployees devuelve scores en 0..100 (ej: 85.5)
-            // mixGlobal espera 0..100 también.
+        const bulkOps = [];
+        const debugs = [];
 
-            // 5. Apply Rules (With Overrides)
-            // Priority: Empleado > Area > Global
-            let activeConfig = { ...config.toObject() }; // Default global
+        // 4. Process Results (In Memory)
+        for (const m of metrics) {
+            const emp = m.empleado;
+            if (!emp) continue;
+
+            const globalScore = m.scoreFinal || 0;
+            const feedbackDate = feedbacks.find(f => String(f.empleado) === String(emp._id))?.updatedAt;
+
+            // --- Rules & Overrides ---
+            let activeConfig = { ...config.toObject() };
             let configSource = "GLOBAL";
 
-            // Check overrides
             if (config.overrides && config.overrides.length > 0) {
                 // Empleado override?
                 const empOverride = config.overrides.find(o => o.type === "empleado" && String(o.targetId) === String(emp._id));
-
                 if (empOverride) {
                     activeConfig.escala = { ...activeConfig.escala, ...empOverride.escala };
-                    if (empOverride.success) activeConfig.escala = empOverride.escala; // Fallback helper
+                    if (empOverride.success) activeConfig.escala = empOverride.escala;
                     if (empOverride.bonoTarget !== undefined) activeConfig.bonoTarget = empOverride.bonoTarget;
                     configSource = "OVERRIDE_EMP";
                 } else {
@@ -110,10 +112,7 @@ export const calculateAll = async (req, res, next) => {
                 }
             }
 
-            const globalScore = metrics?.scoreFinal || 0;
-
-            console.log(`[DEBUG_BONO_CALC] Emp: ${emp.nombre} ${emp.apellido}, Global: ${globalScore}, Source: ${configSource}, Umbral: ${activeConfig.escala.umbral}`);
-
+            // --- Calculation ---
             let bonoPct = 0;
             let calcMeta = "";
 
@@ -135,43 +134,45 @@ export const calculateAll = async (req, res, next) => {
                 calcMeta = "tramos";
             }
 
-            // Re-assign used target for calculation
-            const bonoTargetUsed = activeConfig.bonoTarget;
-
-            // 6. Calculate Amount
-            // Bono Base = Sueldo * BonoTarget (ej: 1.5 sueldos)
             const sueldo = emp.sueldoBase?.monto || 0;
             const bonoBase = sueldo * (activeConfig.bonoTarget || 0);
-            const bonoFinal = bonoBase * bonoPct; // % del bono target ganado según desempeño
+            const bonoFinal = bonoBase * bonoPct;
 
-            // Determine debugging info
             if (targetId) {
-                debugs.push(`${emp.apellido}: Score=${globalScore} -> BonoPct=${bonoPct} (${calcMeta}) [Cfg: ${configSource}]`);
+                debugs.push(`${emp.apellido}: Score=${globalScore} -> Pct=${bonoPct} ($${bonoFinal}) [Cfg: ${configSource}]`);
             }
 
-            // 7. Save BonoAnual
-            const bono = await BonoAnual.findOneAndUpdate(
-                { empleado: emp._id, anio },
-                {
-                    estado: "borrador",
-                    snapshot: {
-                        puesto: emp.puesto,
-                        fechaCierre: feedback.updatedAt,
-                        areaNombre: emp.area?.nombre
+            // Prepare Bulk Operation
+            bulkOps.push({
+                updateOne: {
+                    filter: { empleado: emp._id, anio },
+                    update: {
+                        estado: "borrador",
+                        snapshot: {
+                            puesto: emp.puesto,
+                            fechaCierre: feedbackDate || new Date(),
+                            areaNombre: emp.area?.nombre,
+                            sectorNombre: emp.sector?.nombre
+                        },
+                        bonoBase,
+                        bonoFinal
                     },
-                    bonoBase,
-                    bonoFinal
-                },
-                { new: true, upsert: true }
-            );
-            results.push(bono);
+                    upsert: true
+                }
+            });
+        }
+
+        // 5. Execute Bulk Write (1 Query)
+        if (bulkOps.length > 0) {
+            await BonoAnual.bulkWrite(bulkOps);
         }
 
         res.json({
-            count: results.length,
-            message: "Cálculo finalizado",
-            debugs: debugs.slice(0, 10) // Return first 10 logs if targeted
+            count: bulkOps.length,
+            message: "Cálculo masivo finalizado exitosamente.",
+            debugs: debugs.slice(0, 20)
         });
+
     } catch (err) {
         next(err);
     }
