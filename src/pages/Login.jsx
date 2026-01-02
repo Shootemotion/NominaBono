@@ -16,7 +16,7 @@ export default function Login() {
 
   const { login } = useAuth();
 
-   const navigate = useNavigate();
+  const navigate = useNavigate();
   const from = "/"; // siempre redirigimos al home
 
   const onSubmit = async (e) => {
@@ -30,7 +30,7 @@ export default function Login() {
 
       // si todo OK, navegar
       // siempre al home
-    navigate("/", { replace: true });
+      navigate("/", { replace: true });
 
       // fallback por si StrictMode retrasa el navigate
       setTimeout(() => {
@@ -82,7 +82,7 @@ export default function Login() {
                   type="email"
                   autoComplete="email"
                   className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring pr-9"
-                  placeholder="tu.nombre@diagnos.com"
+                  placeholder="tu.nombre@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -136,13 +136,13 @@ export default function Login() {
         </div>
       </div>
 
-  <CompleteInvite
+      <CompleteInvite
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         initialEmail={inviteEmail}
         afterLoginRedirect="/"
       />
-      
+
     </>
   );
 }

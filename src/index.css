@@ -5,12 +5,13 @@
 /* ====== Paleta Diagnos ====== */
 :root {
   /* Tu paleta */
-  --color-1: #006381; /* primary base */
+  /* Tu paleta - DARK THEME UPDATE */
+  --color-1: #0f172a; /* primary base (Slate 900) */
   --color-2: #ffffff; /* white */
-  --color-3: #005D80; /* primary hover/active */
-  --color-4: #C9C9C9; /* border */
-  --color-5: #E6E6E6; /* muted bg */
-  --color-6: #236F87; /* accent */
+  --color-3: #1e293b; /* primary hover (Slate 800) */
+  --color-4: #cbd5e1; /* border (Slate 300) */
+  --color-5: #f1f5f9; /* muted bg (Slate 100) */
+  --color-6: #334155; /* accent (Slate 700) */
 
   /* Tokens globales que usa Tailwind v4 */
   --background: var(--color-2);

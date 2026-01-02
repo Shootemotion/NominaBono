@@ -2,7 +2,6 @@
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import logo from '@/assets/DiagnosLogo.png';
 import { Button } from '@/components/ui/button';
 import useCan, { useHasRole } from '@/hooks/useCan';
 import { API_ORIGIN, api } from "@/lib/api";
@@ -24,7 +23,8 @@ import {
   UserCircle2,
   TrendingUp,
   Calculator,
-  Home
+  Home,
+  Command
 } from 'lucide-react';
 
 // --- Subcomponentes para Dropdowns ---
@@ -47,7 +47,7 @@ const DropdownGroup = ({ title, icon, items = [], isOpen, onMouseEnter, onMouseL
     >
       <button
         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
-        ${isActiveGroup || isOpen ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:text-blue-600 hover:bg-slate-50'}
+        ${isActiveGroup || isOpen ? 'text-slate-900 bg-slate-100' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}
         `}
       >
         <span>{title}</span>
@@ -62,11 +62,11 @@ const DropdownGroup = ({ title, icon, items = [], isOpen, onMouseEnter, onMouseL
               key={idx}
               to={sub.to}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors
-                ${location.pathname === sub.to ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                ${location.pathname === sub.to ? 'bg-slate-50 text-slate-800 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
               `}
               onClick={closeMenu} // cerrar al click
             >
-              <div className={`p-1.5 rounded-md ${location.pathname === sub.to ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500 group-hover:bg-white'}`}>
+              <div className={`p-1.5 rounded-md ${location.pathname === sub.to ? 'bg-slate-100 text-slate-900' : 'bg-slate-100 text-slate-500 group-hover:bg-white'}`}>
                 {sub.icon}
               </div>
               {sub.label}
@@ -83,7 +83,7 @@ const MobileLink = ({ to, label, onClick }) => (
     to={to}
     onClick={onClick}
     className={({ isActive }) =>
-      `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+      `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
       }`
     }
   >
@@ -227,8 +227,8 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
 
   const linkClass = ({ isActive }) =>
     `flex flex-col items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all duration-200 min-w-[70px] ${isActive
-      ? 'text-blue-600 bg-blue-50 shadow-sm ring-1 ring-blue-100'
-      : 'text-slate-600 hover:text-blue-600 hover:bg-slate-50'
+      ? 'text-slate-900 bg-slate-100 shadow-sm ring-1 ring-slate-200'
+      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
     }`;
 
   const renderNavItem = (to, label, icon, allowed) => {
@@ -255,11 +255,11 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
           {/* Logo */}
           <div className="flex-shrink-0 flex items-center gap-3">
             <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="bg-blue-600 rounded-lg p-1.5 group-hover:bg-blue-700 transition-colors">
-                <img src={logo} alt="Diagnos" className="h-6 w-auto filter brightness-0 invert" />
+              <div className="bg-slate-900 rounded-lg p-1.5 group-hover:bg-slate-800 transition-colors">
+                <Command className="h-6 w-auto text-white" />
               </div>
-              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-blue-500 hidden md:block tracking-tight">
-                Diagnos
+              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 hidden md:block tracking-tight">
+                @gmail.com
               </span>
             </Link>
           </div>
@@ -359,14 +359,14 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
                     onClick={() => setMenuAbierto((v) => !v)}
                   >
                     <div className="flex flex-col items-end hidden md:flex">
-                      <span className="text-xs font-semibold text-slate-700 group-hover:text-blue-600 transition-colors">
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">
                         {user?.fullName || (user?.apellido ? `${user.nombre} ${user.apellido}` : user?.email)}
                       </span>
                       <span className="text-[10px] text-slate-500 uppercase tracking-wide">
                         {user?.empleado?.puesto || user?.rol || "Usuario"}
                       </span>
                     </div>
-                    <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-slate-100 group-hover:ring-blue-100 transition-all">
+                    <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-slate-100 group-hover:ring-slate-200 transition-all">
                       {avatarSrc ? (
                         <img
                           src={avatarSrc}
@@ -442,7 +442,7 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
                 />
               </>
             ) : (
-              <Button onClick={() => nav('/login')} variant="ghost" className="text-slate-600 hover:text-blue-600">
+              <Button onClick={() => nav('/login')} variant="ghost" className="text-slate-600 hover:text-slate-900">
                 Ingresar
               </Button>
             )}
@@ -451,7 +451,7 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
             <div className="flex xl:hidden">
               <button
                 type="button"
-                className="inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                className="inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-slate-500"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               >
                 <span className="sr-only">Abrir menú</span>
@@ -463,65 +463,67 @@ function Navbar({ showDisabledInsteadOfHiding = false }) {
       </nav>
 
       {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <div className="xl:hidden bg-white border-t border-slate-200 h-[calc(100vh-3.5rem)] overflow-y-auto">
-          {location.pathname !== '/' && (
-            <div className="px-4 pt-4 pb-8 space-y-6">
-              {/* Simplified mobile menu - just showing all links under headers */}
-              {isNormalUser ? (
-                <div className="space-y-2">
-                  <NavLink to="/seguimiento" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Seguimiento</NavLink>
-                  <NavLink to="/mi-desempeno" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50">Mi Desempeño</NavLink>
-                </div>
-              ) : (
-                <>
-                  {/* Mi Espacio */}
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Mi Espacio</h3>
-                    <div className="space-y-1">
-                      <MobileLink to="/mi-desempeno" label="Mi Desempeño" />
-                      {user?.empleado?._id && <MobileLink to={`/nomina/legajo/${user.empleado._id}`} label="Mi Legajo" />}
-                    </div>
+      {
+        mobileMenuOpen && (
+          <div className="xl:hidden bg-white border-t border-slate-200 h-[calc(100vh-3.5rem)] overflow-y-auto">
+            {location.pathname !== '/' && (
+              <div className="px-4 pt-4 pb-8 space-y-6">
+                {/* Simplified mobile menu - just showing all links under headers */}
+                {isNormalUser ? (
+                  <div className="space-y-2">
+                    <NavLink to="/seguimiento" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50">Seguimiento</NavLink>
+                    <NavLink to="/mi-desempeno" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50">Mi Desempeño</NavLink>
                   </div>
+                ) : (
+                  <>
+                    {/* Mi Espacio */}
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Mi Espacio</h3>
+                      <div className="space-y-1">
+                        <MobileLink to="/mi-desempeno" label="Mi Desempeño" />
+                        {user?.empleado?._id && <MobileLink to={`/nomina/legajo/${user.empleado._id}`} label="Mi Legajo" />}
+                      </div>
+                    </div>
 
-                  {/* Gestión */}
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Gestión</h3>
-                    <div className="space-y-1">
-                      {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/plantillas" label="Objetivos" />}
-                      {(hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente) && <MobileLink to="/seguimiento" label="Seguimiento" />}
-                      {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/asignaciones" label="Asignaciones" />}
-                      {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/rrhh-evaluaciones" label="Cierres" />}
+                    {/* Gestión */}
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Gestión</h3>
+                      <div className="space-y-1">
+                        {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/plantillas" label="Objetivos" />}
+                        {(hasRoleRRHH || hasRoleDirectivo || canViewNomina || hasReferente) && <MobileLink to="/seguimiento" label="Seguimiento" />}
+                        {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/asignaciones" label="Asignaciones" />}
+                        {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/rrhh-evaluaciones" label="Cierres" />}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Estructura */}
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Estructura</h3>
-                    <div className="space-y-1">
-                      {canViewEstructura && <MobileLink to="/gestion-estructura" label="Nómina / Equipo" />}
-                      {canViewEstructuraFinal && <MobileLink to="/gestion-departamentos" label="Departamentos" />}
-                      {isSuperAdmin && <MobileLink to="/usuarios" label="Usuarios" />}
+                    {/* Estructura */}
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Estructura</h3>
+                      <div className="space-y-1">
+                        {canViewEstructura && <MobileLink to="/gestion-estructura" label="Nómina / Equipo" />}
+                        {canViewEstructuraFinal && <MobileLink to="/gestion-departamentos" label="Departamentos" />}
+                        {isSuperAdmin && <MobileLink to="/usuarios" label="Usuarios" />}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Resultados */}
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Resultados</h3>
-                    <div className="space-y-1">
-                      {(canViewEjecutivo && (hasRoleRRHH || hasRoleDirectivo)) && <MobileLink to="/seguimiento-ejecutivo" label="Tablero Ejecutivo" />}
-                      {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/configuracion-bono" label="Config. Bonos" />}
-                      {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/resultados-bono" label="Resultados Finales" />}
-                      {(hasRoleRRHH || hasRoleDirectivo || user?.isJefeArea || user?.isJefeSector) && <MobileLink to="/simulador" label="Simulador" />}
+                    {/* Resultados */}
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Resultados</h3>
+                      <div className="space-y-1">
+                        {(canViewEjecutivo && (hasRoleRRHH || hasRoleDirectivo)) && <MobileLink to="/seguimiento-ejecutivo" label="Tablero Ejecutivo" />}
+                        {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/configuracion-bono" label="Config. Bonos" />}
+                        {(hasRoleRRHH || hasRoleDirectivo) && <MobileLink to="/resultados-bono" label="Resultados Finales" />}
+                        {(hasRoleRRHH || hasRoleDirectivo || user?.isJefeArea || user?.isJefeSector) && <MobileLink to="/simulador" label="Simulador" />}
+                      </div>
                     </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </header>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      }
+    </header >
   );
 }
 
