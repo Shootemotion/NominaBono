@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Home, Copy, Check } from "lucide-react";
 import { api } from "@/lib/api";
-import { toast } from "react-toastify";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import CarreraTable from "@/components/CarreraTable.jsx";
 import CapacitacionesTable from "@/components/CapacitacionesTable.jsx";

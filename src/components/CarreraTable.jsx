@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { api } from "@/lib/api";
-import { toast } from "react-toastify";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2, Building, Briefcase, Calendar } from "lucide-react";
 

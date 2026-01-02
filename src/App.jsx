@@ -1,8 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import RequireAuth from '@/components/RequireAuth';
 import Navbar from '@/components/Navbar';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+
 import { getToken } from '@/lib/api';
 import { Toaster } from "@/components/ui/sonner";
 import EvaluacionFlujo from '@/pages/EvaluacionFlujo';
@@ -195,7 +194,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <ToastContainer position="top-left" autoClose={2200} theme="colored" newestOnTop />
+
       <Toaster richColors position="top-right" />
     </>
   );

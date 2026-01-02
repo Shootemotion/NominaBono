@@ -1,6 +1,6 @@
 // src/pages/GestionNomina.jsx
 import { useState, useEffect, useMemo } from "react";
-import { toast } from "react-toastify";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Modal from "@/components/Modal.jsx";

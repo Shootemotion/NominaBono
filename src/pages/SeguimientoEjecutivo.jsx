@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { toast } from "react-toastify";
+import { toast } from "sonner";
 import {
   ChevronDown,
   ChevronUp,

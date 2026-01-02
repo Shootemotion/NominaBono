@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { api } from "@/lib/api";
-import { toast } from "react-toastify";
+import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Search, Download, DollarSign, UserCircle2, MessageSquare, TrendingUp, Award, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 

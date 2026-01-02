@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { toast } from "react-toastify";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { dashEmpleado } from "@/lib/dashboard";
 import { api } from "@/lib/api";

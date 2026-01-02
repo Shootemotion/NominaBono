@@ -1,6 +1,6 @@
 // src/components/FormularioObjetivos.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
@@ -70,7 +70,7 @@ export default function FormularioObjetivos({
     setDescripcion(initialData.descripcion || "");
     setProceso(initialData.proceso || "");
     setEstado(initialData.activo ? "Activo" : "Inactivo");
-   
+
 
     setYear(initialData.year || currentYear);
 
