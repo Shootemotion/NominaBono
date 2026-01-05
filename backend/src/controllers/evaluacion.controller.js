@@ -2,78 +2,10 @@
 import mongoose from "mongoose";
 import Evaluacion from "../models/Evaluacion.model.js";
 import Plantilla from "../models/Plantilla.model.js";
-import {
-  normalizarConfigMeta,
-  calcularScorePeriodoMeta,
-} from "../lib/calculoMetas.js";
-import { calcularScoreObjetivoDesdeMetas } from "../lib/scoringGlobal.js";
+
 import { recalcularAnualEmpleado } from "../lib/recalculoEmpleado.js";
 
-/* ============================================================================
- * Utilidades
- * ========================================================================== */
-
-function pushTimeline(ev, { by, action, note, snapshot }) {
-  ev.timeline = ev.timeline || [];
-  ev.timeline.push({ at: new Date(), by, action, note, snapshot });
-}
-
-/**
- * Procesa metas crudas de un período y devuelve:
- *  - metasProcesadas: versión lista para guardar en Evaluacion.metasResultados
- *  - scoreObjetivo:   número 0..100 (o 0..120 si permitís over)
- *
- * ACA es donde se respeta reconoceEsfuerzo / tolerancia / permiteOver,
- * porque usamos normalizarConfigMeta + calcularScorePeriodoMeta.
- */
-function prepararMetasPeriodo(metasResultados = [], acumulados = {}) {
-  if (!Array.isArray(metasResultados) || metasResultados.length === 0) {
-    return { metasProcesadas: [], scoreObjetivo: null };
-  }
-
-  const metasConScore = metasResultados.map((m) => {
-    // une params del frontend con defaults de la meta de plantilla
-    const cfg = normalizarConfigMeta(m);
-
-    // Lógica de acumulación
-    let valorParaCalculo = Number(m.resultado) || 0;
-    if (cfg.modoAcumulacion === "acumulativo") {
-      const prev = acumulados[m.metaId] || 0;
-      valorParaCalculo += prev;
-    }
-
-    // calcula scoreMeta (0..100/120) + cumple usando reconoceEsfuerzo, etc.
-    const { score, cumple } = calcularScorePeriodoMeta(cfg, valorParaCalculo);
-
-    return {
-      metaId: m.metaId ?? null,
-      nombre: m.nombre,
-      unidad: m.unidad,
-      operador: m.operador || ">=",
-      esperado: m.esperado ?? m.target ?? null,
-
-      pesoMeta: m.pesoMeta ?? null,
-      reconoceEsfuerzo: cfg.reconoceEsfuerzo,
-      permiteOver: cfg.permiteOver,
-      tolerancia: cfg.tolerancia,
-      modoAcumulacion: cfg.modoAcumulacion,
-      acumulativa: m.acumulativa ?? false,
-      reglaCierre: cfg.reglaCierre,
-
-      resultado: m.resultado,
-      cumple,
-      // 👇 sólo para cálculo en memoria
-      scoreMeta: score,
-    };
-  });
-
-  const scoreObjetivo = calcularScoreObjetivoDesdeMetas(metasConScore);
-
-  // sacamos scoreMeta antes de guardar
-  const metasProcesadas = metasConScore.map(({ scoreMeta, ...rest }) => rest);
-
-  return { metasProcesadas, scoreObjetivo };
-}
+import { EvaluacionService } from "../services/evaluacion.service.js";
 
 /* ============================================================================
  * 1) EXISTENTES: actualización de hitos
@@ -94,28 +26,13 @@ export const updateHito = async (req, res) => {
     }
 
     // Calcular acumulados de períodos anteriores (solo si es para un empleado específico)
-    const acumulados = {};
+    let acumulados = {};
     if (!applyToAll && (!empleadosIds || empleadosIds.length === 0)) {
-      const anio = Number(String(periodo).slice(0, 4));
-      const siblings = await Evaluacion.find({
-        plantillaId,
-        year: anio,
-        empleado: empleadoId,
-        periodo: { $lt: periodo } // Períodos anteriores
-      }).lean();
-
-      siblings.forEach(ev => {
-        ev.metasResultados?.forEach(m => {
-          if (m.metaId) {
-            if (!acumulados[m.metaId]) acumulados[m.metaId] = 0;
-            acumulados[m.metaId] += Number(m.resultado) || 0;
-          }
-        });
-      });
+      acumulados = await EvaluacionService.getAcumuladosAnteriores(plantillaId, periodo, empleadoId);
     }
 
     // 🔹 procesar metas → scoreMeta & cumple para este período
-    const { metasProcesadas, scoreObjetivo } = prepararMetasPeriodo(
+    const { metasProcesadas, scoreObjetivo } = EvaluacionService.prepararMetasPeriodo(
       metasResultados,
       acumulados
     );
@@ -130,8 +47,6 @@ export const updateHito = async (req, res) => {
       metasResultados: metasProcesadas,
       estado: "MANAGER_DRAFT",
     };
-
-
 
     // Target de empleados
     let targetEmpleados = [empleadoId];
@@ -198,7 +113,7 @@ export const updateHitoMultiple = async (req, res) => {
       return res.status(400).json({ message: "Datos incompletos" });
     }
 
-    const { metasProcesadas, scoreObjetivo } = prepararMetasPeriodo(
+    const { metasProcesadas, scoreObjetivo } = EvaluacionService.prepararMetasPeriodo(
       metasResultados
     );
 
@@ -362,7 +277,7 @@ export async function patchEvaluacion(req, res) {
 
     if (!ev.manager && req.user?._id) ev.manager = req.user._id;
 
-    pushTimeline(ev, {
+    EvaluacionService.pushTimeline(ev, {
       by: req.user?._id,
       action: "MANAGER_EDIT",
       snapshot: body,
@@ -390,7 +305,7 @@ export async function submitToEmployee(req, res) {
     ev.estado = "PENDING_EMPLOYEE";
     ev.submittedToEmployeeAt = new Date();
     if (!ev.manager && req.user?._id) ev.manager = req.user._id;
-    pushTimeline(ev, { by: req.user?._id, action: "MANAGER_SUBMIT" });
+    EvaluacionService.pushTimeline(ev, { by: req.user?._id, action: "MANAGER_SUBMIT" });
     await ev.save();
     res.json(ev);
   } catch (e) {
@@ -427,7 +342,7 @@ export async function employeeAck(req, res) {
 
     ev.empleadoAck = { estado: "ACK", fecha: new Date(), userId: req.user?._id };
     ev.estado = "PENDING_HR";
-    pushTimeline(ev, {
+    EvaluacionService.pushTimeline(ev, {
       by: req.user?._id,
       action: "EMPLOYEE_ACK",
       note: comentarioEmpleado,
@@ -469,7 +384,7 @@ export async function employeeContest(req, res) {
       userId: req.user?._id,
     };
     ev.estado = "PENDING_HR";
-    pushTimeline(ev, {
+    EvaluacionService.pushTimeline(ev, {
       by: req.user?._id,
       action: "EMPLOYEE_CONTEST",
       note: comentarioEmpleado,
@@ -494,7 +409,7 @@ export async function submitToHR(req, res) {
     }
     ev.estado = "PENDING_HR";
     ev.submittedToHRAt = new Date();
-    pushTimeline(ev, { by: req.user?._id, action: "SUBMIT_HR" });
+    EvaluacionService.pushTimeline(ev, { by: req.user?._id, action: "SUBMIT_HR" });
     await ev.save();
     res.json(ev);
   } catch (e) {
@@ -518,7 +433,7 @@ export async function closeEvaluacion(req, res) {
     ev.closedAt = new Date();
     ev.hrReviewer = req.user?._id || ev.hrReviewer;
     if (comentarioRRHH !== undefined) ev.comentarioRRHH = comentarioRRHH;
-    pushTimeline(ev, { by: req.user?._id, action: "HR_CLOSE", note: comentarioRRHH });
+    EvaluacionService.pushTimeline(ev, { by: req.user?._id, action: "HR_CLOSE", note: comentarioRRHH });
     await ev.save();
     res.json(ev);
   } catch (e) {
@@ -540,7 +455,7 @@ export async function reopenEvaluacion(req, res) {
     }
     ev.estado = "MANAGER_DRAFT";
     ev.closedAt = null;
-    pushTimeline(ev, { by: req.user?._id, action: "REOPEN", note });
+    EvaluacionService.pushTimeline(ev, { by: req.user?._id, action: "REOPEN", note });
     await ev.save();
     res.json(ev);
   } catch (e) {
@@ -617,7 +532,7 @@ export async function closeBulk(req, res) {
       ev.estado = "CLOSED";
       ev.closedAt = new Date();
       ev.hrReviewer = req.user?._id || ev.hrReviewer;
-      pushTimeline(ev, { by: req.user?._id, action: "HR_CLOSE_BULK" });
+      EvaluacionService.pushTimeline(ev, { by: req.user?._id, action: "HR_CLOSE_BULK" });
       await ev.save();
     }
     res.json({ success: true, count: docs.length });
@@ -684,7 +599,7 @@ export async function createEvaluacion(req, res) {
     const anio = parseInt(String(periodo).substring(0, 4), 10);
 
     const metasResultadosBody = req.body.metasResultados || [];
-    const { metasProcesadas, scoreObjetivo } = prepararMetasPeriodo(
+    const { metasProcesadas, scoreObjetivo } = EvaluacionService.prepararMetasPeriodo(
       metasResultadosBody
     );
 
